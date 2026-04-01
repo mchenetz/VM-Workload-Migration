@@ -26,17 +26,18 @@ FROM node:22-alpine
 WORKDIR /app
 
 ENV NODE_ENV=production
-# Set HOME and npm cache to /tmp so any UID (including OpenShift-assigned UIDs) can write to them
-ENV HOME=/tmp \
-    NPM_CONFIG_CACHE=/tmp/.npm
 
 # Copy package files and install all deps (tsx needed for runtime)
 COPY package.json package-lock.json ./
 COPY shared/package.json shared/
 COPY server/package.json server/
 
+# Install deps as root, then scrub the npm cache entirely so no root-owned
+# cache files remain in the image.  The runtime command never calls npm/npx,
+# so no cache directory is needed after this point.
 RUN npm ci --workspace=server --workspace=shared && \
-    npm cache clean --force
+    npm cache clean --force && \
+    rm -rf /root/.npm /tmp/.npm
 
 # Copy server and shared source (tsx runs TypeScript directly)
 COPY shared/src/ shared/src/
@@ -52,4 +53,6 @@ EXPOSE 3001
 
 USER node
 
-CMD ["npx", "tsx", "server/src/index.ts"]
+# Invoke tsx directly from node_modules/.bin — avoids npx entirely so npm
+# never tries to read or write a cache directory at container startup.
+CMD ["node_modules/.bin/tsx", "server/src/index.ts"]
