@@ -26,6 +26,7 @@ FROM node:22-alpine
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV HOME=/tmp
 
 # Copy package files and install all deps (tsx needed for runtime)
 COPY package.json package-lock.json ./
