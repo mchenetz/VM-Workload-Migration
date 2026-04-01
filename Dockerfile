@@ -17,10 +17,8 @@ COPY server/ server/
 COPY client/ client/
 COPY tsconfig.base.json ./
 
-# Build shared -> server -> client
-RUN npm run build -w shared && \
-    npm run build -w server && \
-    npm run build -w client
+# Build client (produces client/dist/)
+RUN npm run build -w client
 
 # ── Production Stage ──
 FROM node:22-alpine
@@ -29,23 +27,26 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Copy package files and install production deps only
+# Copy package files and install all deps (tsx needed for runtime)
 COPY package.json package-lock.json ./
 COPY shared/package.json shared/
 COPY server/package.json server/
 
-RUN npm ci --omit=dev --workspace=server --workspace=shared && \
+RUN npm ci --workspace=server --workspace=shared && \
     npm cache clean --force
 
-# Copy built artifacts
-COPY --from=build /app/server/dist/ server/dist/
-COPY --from=build /app/client/dist/ client/dist/
+# Copy server and shared source (tsx runs TypeScript directly)
+COPY shared/src/ shared/src/
+COPY shared/tsconfig.json shared/
+COPY server/src/ server/src/
+COPY server/tsconfig.json server/
+COPY tsconfig.base.json ./
 
-# pdfmake needs font files at runtime
-COPY --from=build /app/node_modules/pdfmake/build/vfs_fonts/ node_modules/pdfmake/build/vfs_fonts/
+# Copy built client
+COPY --from=build /app/client/dist/ client/dist/
 
 EXPOSE 3001
 
 USER node
 
-CMD ["node", "server/dist/index.js"]
+CMD ["npx", "tsx", "server/src/index.ts"]

@@ -4,13 +4,33 @@ import type {
 } from '@vm-migration/shared';
 import PdfPrinter from 'pdfmake';
 import type { TDocumentDefinitions, Content, TableCell } from 'pdfmake/interfaces.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+
+// Extract embedded fonts from pdfmake's vfs to temp files for PdfPrinter
+const require_ = createRequire(import.meta.url);
+const vfsModule = require_('pdfmake/build/vfs_fonts.js');
+const vfs: Record<string, string> = vfsModule.pdfMake?.vfs ?? vfsModule;
+
+const fontDir = path.join(os.tmpdir(), 'pdfmake-fonts');
+fs.mkdirSync(fontDir, { recursive: true });
+
+function extractFont(name: string): string {
+  const filePath = path.join(fontDir, name);
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, Buffer.from(vfs[name], 'base64'));
+  }
+  return filePath;
+}
 
 const fonts = {
   Roboto: {
-    normal: 'node_modules/pdfmake/build/vfs_fonts/Roboto-Regular.ttf',
-    bold: 'node_modules/pdfmake/build/vfs_fonts/Roboto-Medium.ttf',
-    italics: 'node_modules/pdfmake/build/vfs_fonts/Roboto-Italic.ttf',
-    bolditalics: 'node_modules/pdfmake/build/vfs_fonts/Roboto-MediumItalic.ttf',
+    normal: extractFont('Roboto-Regular.ttf'),
+    bold: extractFont('Roboto-Medium.ttf'),
+    italics: extractFont('Roboto-Italic.ttf'),
+    bolditalics: extractFont('Roboto-MediumItalic.ttf'),
   },
 };
 
