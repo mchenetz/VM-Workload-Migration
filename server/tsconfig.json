@@ -1,0 +1,13 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "paths": {
+      "@vm-migration/shared": ["../shared/src/index.ts"]
+    }
+  },
+  "include": ["src", "../shared/src"]
+}
