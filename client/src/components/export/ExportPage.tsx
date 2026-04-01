@@ -29,7 +29,8 @@ export function ExportPage() {
         includeFormulas,
         includeRecommendations,
       };
-      const blob = await exportPDF(calculationResults, options);
+      // Pass only the results array — the server exportSchema expects CalculationResult[]
+      const blob = await exportPDF(calculationResults.results, options);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

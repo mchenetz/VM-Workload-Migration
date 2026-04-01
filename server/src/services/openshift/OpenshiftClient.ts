@@ -56,12 +56,29 @@ export class OpenshiftClient {
     }
   }
 
+  /**
+   * GET /version is accessible to any authenticated user regardless of RBAC.
+   * Avoids the 403 that results from using /api/v1/namespaces with a token
+   * that lacks list-namespaces permission (common in OpenShift 4.x).
+   */
   async testConnection(): Promise<boolean> {
     try {
-      await this.api.get('/api/v1/namespaces');
+      await this.api.get('/version');
       return true;
     } catch {
       return false;
+    }
+  }
+
+  async getClusterVersion(): Promise<string> {
+    try {
+      const response = await this.api.get('/version');
+      const v = response.data;
+      // OpenShift embeds the OCP version in the openshift-apiservers group;
+      // fall back to the Kubernetes version string if not present.
+      return (v.openshiftVersion ?? `${v.major}.${v.minor}`) as string;
+    } catch {
+      return 'unknown';
     }
   }
 }

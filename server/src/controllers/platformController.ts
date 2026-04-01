@@ -62,7 +62,15 @@ export async function connect(
       case 'openshift': {
         const creds = credentials as OpenShiftCredentials;
         client = new OpenshiftClient(endpoint, creds.token);
-        await (client as OpenshiftClient).testConnection();
+        const ok = await (client as OpenshiftClient).testConnection();
+        if (!ok) {
+          throw new Error(
+            'Could not reach the OpenShift API. ' +
+            'Verify the endpoint URL and that the bearer token is valid.',
+          );
+        }
+        // Store the cluster version on the connection object
+        connection.version = await (client as OpenshiftClient).getClusterVersion();
         break;
       }
       case 'flasharray': {

@@ -10,6 +10,10 @@ export async function discoverFlashArray(
   volumes: FlashArrayVolume[];
   performance: FlashArrayPerformance;
 }> {
+  // Ensure the session is alive before fetching data.
+  // connect() is idempotent — the 401 interceptor will also handle mid-session expiry.
+  await client.connect();
+
   const [volumeResponse, performanceResponse] = await Promise.all([
     client.getVolumes(),
     client.getPerformance(),

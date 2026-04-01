@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, AxiosError } from 'axios';
 import https from 'node:https';
 
 export class FlashArrayClient {
@@ -16,30 +16,52 @@ export class FlashArrayClient {
       httpsAgent: new https.Agent({ rejectUnauthorized: false }),
     });
 
+    // Attach the session token to every outgoing request
     this.api.interceptors.request.use((config) => {
       if (this.authToken) {
         config.headers['x-auth-token'] = this.authToken;
       }
       return config;
     });
+
+    // On 401 (session expired), re-authenticate and retry the original request once
+    this.api.interceptors.response.use(
+      (response) => response,
+      async (error: AxiosError) => {
+        const originalRequest = error.config as typeof error.config & { _retry?: boolean };
+        if (error.response?.status === 401 && !originalRequest._retry) {
+          originalRequest._retry = true;
+          try {
+            await this.connect();
+            if (originalRequest.headers && this.authToken) {
+              originalRequest.headers['x-auth-token'] = this.authToken;
+            }
+            return this.api(originalRequest);
+          } catch {
+            // Re-auth also failed — fall through and reject with original error
+          }
+        }
+        return Promise.reject(error);
+      },
+    );
   }
 
   async connect(): Promise<void> {
     try {
       const response = await this.api.post('/api/2.0/login', null, {
-        headers: {
-          'api-token': this.apiToken,
-        },
+        headers: { 'api-token': this.apiToken },
       });
 
-      this.authToken = response.headers['x-auth-token'] ?? response.data?.['x-auth-token'] ?? null;
+      this.authToken =
+        response.headers['x-auth-token'] ??
+        response.data?.['x-auth-token'] ??
+        null;
 
       if (!this.authToken) {
         throw new Error('No auth token received from FlashArray');
       }
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Unknown error';
+      const message = error instanceof Error ? error.message : 'Unknown error';
       throw new Error(`Failed to connect to FlashArray: ${message}`);
     }
   }
@@ -47,10 +69,14 @@ export class FlashArrayClient {
   async getVolumes(): Promise<PureVolumeResponse> {
     try {
       const response = await this.api.get('/api/2.0/volumes');
-      return response.data;
+      // Handle both { items: [...] } and direct array responses
+      const data = response.data;
+      if (Array.isArray(data)) {
+        return { items: data };
+      }
+      return data as PureVolumeResponse;
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Unknown error';
+      const message = error instanceof Error ? error.message : 'Unknown error';
       throw new Error(`Failed to get volumes: ${message}`);
     }
   }
@@ -58,10 +84,13 @@ export class FlashArrayClient {
   async getPerformance(): Promise<PurePerformanceResponse> {
     try {
       const response = await this.api.get('/api/2.0/arrays/performance');
-      return response.data;
+      const data = response.data;
+      if (Array.isArray(data)) {
+        return { items: data };
+      }
+      return data as PurePerformanceResponse;
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Unknown error';
+      const message = error instanceof Error ? error.message : 'Unknown error';
       throw new Error(`Failed to get performance metrics: ${message}`);
     }
   }
