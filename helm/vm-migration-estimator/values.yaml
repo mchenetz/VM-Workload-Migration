@@ -29,10 +29,10 @@ serviceAccount:
 podAnnotations: {}
 
 # -- Pod security context
+# runAsUser and fsGroup are intentionally omitted to allow OpenShift to
+# assign a valid UID/fsGroup from the namespace's allowed range automatically.
 podSecurityContext:
   runAsNonRoot: true
-  runAsUser: 1000
-  fsGroup: 1000
 
 # -- Container security context
 securityContext:
