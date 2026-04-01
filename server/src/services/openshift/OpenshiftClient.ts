@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, AxiosError } from 'axios';
 import https from 'node:https';
 
 export class OpenshiftClient {
@@ -60,12 +60,37 @@ export class OpenshiftClient {
    * GET /version is accessible to any authenticated user regardless of RBAC.
    * Avoids the 403 that results from using /api/v1/namespaces with a token
    * that lacks list-namespaces permission (common in OpenShift 4.x).
+   *
+   * Throws with a descriptive message on 401 (expired/invalid token) so the
+   * caller can surface the exact problem rather than a generic "can't reach"
+   * error.
    */
   async testConnection(): Promise<boolean> {
     try {
       await this.api.get('/version');
       return true;
-    } catch {
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const e = error as AxiosError;
+        if (e.response?.status === 401) {
+          throw new Error(
+            'Bearer token is invalid or expired (HTTP 401). ' +
+            'Generate a fresh token with: oc whoami -t',
+          );
+        }
+        if (e.response?.status === 403) {
+          throw new Error(
+            'Bearer token authenticated but lacks permission to read /version (HTTP 403). ' +
+            'Ensure the service account has at least cluster-reader role.',
+          );
+        }
+        if (!e.response) {
+          // Network-level failure (DNS, connection refused, timeout)
+          throw new Error(
+            `Cannot reach OpenShift API at ${this.endpoint}: ${e.message}`,
+          );
+        }
+      }
       return false;
     }
   }

@@ -2,7 +2,9 @@ import type {
   FlashArrayVolume,
   FlashArrayPerformance,
 } from '@vm-migration/shared';
-import { FlashArrayClient } from './FlashArrayClient.js';
+import { FlashArrayClient, type PurePerformanceResponse } from './FlashArrayClient.js';
+
+const EMPTY_PERF: PurePerformanceResponse = { items: [] };
 
 export async function discoverFlashArray(
   client: FlashArrayClient,
@@ -14,9 +16,15 @@ export async function discoverFlashArray(
   // connect() is idempotent — the 401 interceptor will also handle mid-session expiry.
   await client.connect();
 
+  // Fetch volumes and performance independently so a performance permission
+  // error (404/403) does not prevent volume data from being returned.
   const [volumeResponse, performanceResponse] = await Promise.all([
     client.getVolumes(),
-    client.getPerformance(),
+    client.getPerformance().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[flasharray] Performance metrics unavailable: ${msg}`);
+      return EMPTY_PERF;
+    }),
   ]);
 
   const volumes: FlashArrayVolume[] = volumeResponse.items.map((v) => ({
