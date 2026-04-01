@@ -1,0 +1,222 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on tags like v1.0.0
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+  pages: write
+  id-token: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/vm-migration-estimator
+
+jobs:
+  # ── Determine Version ──
+  version:
+    name: Determine Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Set version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ── Build & Push Docker Image ──
+  docker:
+    name: Docker Image
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}},value=v${{ needs.version.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=v${{ needs.version.outputs.version }}
+            type=semver,pattern={{major}},value=v${{ needs.version.outputs.version }}
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+  # ── Helm Chart to OCI Registry ──
+  helm-oci:
+    name: Helm Chart (OCI)
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+
+      - name: Update chart version
+        run: |
+          sed -i "s/^version:.*/version: ${{ needs.version.outputs.version }}/" helm/vm-migration-estimator/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${{ needs.version.outputs.version }}\"/" helm/vm-migration-estimator/Chart.yaml
+
+      - name: Update default image in values.yaml
+        run: |
+          sed -i "s|repository:.*|repository: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}|" helm/vm-migration-estimator/values.yaml
+          sed -i "s|tag:.*|tag: \"${{ needs.version.outputs.version }}\"|" helm/vm-migration-estimator/values.yaml
+
+      - name: Lint
+        run: helm lint helm/vm-migration-estimator
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Package and push
+        run: |
+          helm package helm/vm-migration-estimator
+          helm push vm-migration-estimator-${{ needs.version.outputs.version }}.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
+
+  # ── Helm Chart to GitHub Pages ──
+  helm-pages:
+    name: Helm Chart (Pages)
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: azure/setup-helm@v4
+
+      - name: Update chart version
+        run: |
+          sed -i "s/^version:.*/version: ${{ needs.version.outputs.version }}/" helm/vm-migration-estimator/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${{ needs.version.outputs.version }}\"/" helm/vm-migration-estimator/Chart.yaml
+
+      - name: Update default image in values.yaml
+        run: |
+          sed -i "s|repository:.*|repository: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}|" helm/vm-migration-estimator/values.yaml
+          sed -i "s|tag:.*|tag: \"${{ needs.version.outputs.version }}\"|" helm/vm-migration-estimator/values.yaml
+
+      - name: Checkout gh-pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --heads origin gh-pages | grep -q gh-pages; then
+            git fetch origin gh-pages
+            git checkout gh-pages
+            git checkout main -- helm/
+          else
+            git checkout --orphan gh-pages
+            git rm -rf . || true
+            git checkout main -- helm/
+            echo "# Helm Chart Repository" > README.md
+          fi
+
+      - name: Package and index
+        run: |
+          helm package helm/vm-migration-estimator
+          helm repo index . --url https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+
+      - name: Push gh-pages
+        run: |
+          git add .
+          git commit -m "Release v${{ needs.version.outputs.version }}" || echo "No changes"
+          git push origin gh-pages
+
+  # ── GitHub Release ──
+  github-release:
+    name: GitHub Release
+    needs: [version, docker, helm-oci]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+
+      - name: Update chart version
+        run: |
+          sed -i "s/^version:.*/version: ${{ needs.version.outputs.version }}/" helm/vm-migration-estimator/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${{ needs.version.outputs.version }}\"/" helm/vm-migration-estimator/Chart.yaml
+          sed -i "s|repository:.*|repository: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}|" helm/vm-migration-estimator/values.yaml
+          sed -i "s|tag:.*|tag: \"${{ needs.version.outputs.version }}\"|" helm/vm-migration-estimator/values.yaml
+
+      - name: Package chart
+        run: |
+          mkdir -p .release
+          helm package helm/vm-migration-estimator -d .release
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          name: v${{ needs.version.outputs.version }}
+          body: |
+            ## VM Migration Estimator v${{ needs.version.outputs.version }}
+
+            ### Docker Image
+            ```bash
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}
+            ```
+
+            ### Helm Chart (OCI)
+            ```bash
+            helm install vm-migration oci://ghcr.io/${{ github.repository_owner }}/charts/vm-migration-estimator \
+              --version ${{ needs.version.outputs.version }}
+            ```
+
+            ### Helm Chart (Repo)
+            ```bash
+            helm repo add vm-migration https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+            helm install vm-migration vm-migration/vm-migration-estimator \
+              --version ${{ needs.version.outputs.version }}
+            ```
+
+            ### Quick Start
+            ```bash
+            # With default values
+            helm install vm-migration oci://ghcr.io/${{ github.repository_owner }}/charts/vm-migration-estimator
+
+            # With OpenShift Route
+            helm install vm-migration oci://ghcr.io/${{ github.repository_owner }}/charts/vm-migration-estimator \
+              --set route.enabled=true
+
+            # With platform connections
+            helm install vm-migration oci://ghcr.io/${{ github.repository_owner }}/charts/vm-migration-estimator \
+              --set platforms.vmware.enabled=true \
+              --set platforms.vmware.endpoint=https://vcenter.example.com \
+              --set secrets.vmware.username=admin@vsphere.local \
+              --set secrets.vmware.password=changeme
+            ```
+          files: .release/*.tgz
+          generate_release_notes: true
