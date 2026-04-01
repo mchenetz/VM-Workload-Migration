@@ -152,7 +152,253 @@ vm-migration-estimator/
 | Balanced | 4 | 70% | 35% | 12% |
 | Aggressive | 8 | 85% | 50% | 10% |
 
-## Getting Started
+## Helm Deployment
+
+Deploy to any Kubernetes cluster or OpenShift with Helm 3.
+
+### Prerequisites
+
+- Helm 3.8+ (`helm version`)
+- Access to a Kubernetes cluster or OpenShift 4.x
+- `kubectl` / `oc` configured against your target cluster
+
+### Install from OCI Registry (Recommended)
+
+```bash
+helm install vm-migration \
+  oci://ghcr.io/mchenetz/charts/vm-migration-estimator \
+  --version 1.0.0
+```
+
+### Install from Helm Repository
+
+```bash
+helm repo add vm-migration https://mchenetz.github.io/VM-Workload-Migration/
+helm repo update
+helm install vm-migration vm-migration/vm-migration-estimator
+```
+
+### Install from Release Tarball
+
+Download the `.tgz` from the [GitHub Releases](https://github.com/mchenetz/VM-Workload-Migration/releases) page:
+
+```bash
+helm install vm-migration vm-migration-estimator-1.0.0.tgz
+```
+
+### Verify the Installation
+
+```bash
+# Wait for pod to be ready
+kubectl rollout status deployment/vm-migration-vm-migration-estimator
+
+# Check the service
+kubectl get svc vm-migration-vm-migration-estimator
+
+# Port-forward for local access
+kubectl port-forward svc/vm-migration-vm-migration-estimator 3001:3001
+# Visit http://localhost:3001
+```
+
+---
+
+### Expose the Application
+
+#### Standard Kubernetes Ingress
+
+```bash
+helm install vm-migration oci://ghcr.io/mchenetz/charts/vm-migration-estimator \
+  --set ingress.enabled=true \
+  --set ingress.className=nginx \
+  --set ingress.host=vm-migration.example.com
+```
+
+With TLS via cert-manager:
+
+```bash
+helm install vm-migration oci://ghcr.io/mchenetz/charts/vm-migration-estimator \
+  --set ingress.enabled=true \
+  --set ingress.className=nginx \
+  --set ingress.host=vm-migration.example.com \
+  --set ingress.annotations."cert-manager\.io/cluster-issuer"=letsencrypt \
+  --set "ingress.tls[0].secretName=vm-migration-tls" \
+  --set "ingress.tls[0].hosts[0]=vm-migration.example.com"
+```
+
+#### OpenShift Route
+
+```bash
+helm install vm-migration oci://ghcr.io/mchenetz/charts/vm-migration-estimator \
+  --set route.enabled=true
+```
+
+Custom hostname with re-encrypt termination:
+
+```bash
+helm install vm-migration oci://ghcr.io/mchenetz/charts/vm-migration-estimator \
+  --set route.enabled=true \
+  --set route.host=vm-migration.apps.cluster.example.com \
+  --set route.termination=reencrypt
+```
+
+---
+
+### Connect to Infrastructure Platforms
+
+Platform credentials are stored in a Kubernetes Secret. Pass them at install time:
+
+#### VMware vCenter
+
+```bash
+helm install vm-migration oci://ghcr.io/mchenetz/charts/vm-migration-estimator \
+  --set platforms.vmware.enabled=true \
+  --set platforms.vmware.endpoint=https://vcenter.example.com \
+  --set secrets.vmware.username=admin@vsphere.local \
+  --set secrets.vmware.password=changeme
+```
+
+#### OpenShift (for MTV status discovery)
+
+```bash
+helm install vm-migration oci://ghcr.io/mchenetz/charts/vm-migration-estimator \
+  --set platforms.openshift.enabled=true \
+  --set platforms.openshift.endpoint=https://api.cluster.example.com:6443 \
+  --set platforms.openshift.namespace=openshift-mtv \
+  --set secrets.openshift.token=<bearer-token>
+```
+
+#### Pure Storage FlashArray
+
+```bash
+helm install vm-migration oci://ghcr.io/mchenetz/charts/vm-migration-estimator \
+  --set platforms.flasharray.enabled=true \
+  --set platforms.flasharray.endpoint=https://flasharray.example.com \
+  --set secrets.flasharray.apiToken=<api-token>
+```
+
+#### All Platforms
+
+```bash
+helm install vm-migration oci://ghcr.io/mchenetz/charts/vm-migration-estimator \
+  --set route.enabled=true \
+  --set platforms.vmware.enabled=true \
+  --set platforms.vmware.endpoint=https://vcenter.example.com \
+  --set secrets.vmware.username=admin@vsphere.local \
+  --set secrets.vmware.password=changeme \
+  --set platforms.openshift.enabled=true \
+  --set platforms.openshift.endpoint=https://api.cluster.example.com:6443 \
+  --set secrets.openshift.token=<bearer-token> \
+  --set platforms.flasharray.enabled=true \
+  --set platforms.flasharray.endpoint=https://flasharray.example.com \
+  --set secrets.flasharray.apiToken=<api-token>
+```
+
+#### Use an Existing Secret
+
+If you manage secrets externally (Vault, SealedSecrets, ESO), create the secret yourself and reference it:
+
+```bash
+kubectl create secret generic my-migration-creds \
+  --from-literal=VMWARE_USERNAME=admin@vsphere.local \
+  --from-literal=VMWARE_PASSWORD=changeme \
+  --from-literal=OPENSHIFT_TOKEN=<token> \
+  --from-literal=FLASHARRAY_API_TOKEN=<token>
+
+helm install vm-migration oci://ghcr.io/mchenetz/charts/vm-migration-estimator \
+  --set secrets.create=false \
+  --set secrets.existingSecret=my-migration-creds
+```
+
+---
+
+### values.yaml Reference
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `replicaCount` | `1` | Number of pod replicas |
+| `image.repository` | `vm-migration-estimator` | Container image repository |
+| `image.tag` | `""` | Image tag (defaults to chart appVersion) |
+| `image.pullPolicy` | `IfNotPresent` | Image pull policy |
+| `imagePullSecrets` | `[]` | Pull secrets for private registries |
+| `service.type` | `ClusterIP` | Service type |
+| `service.port` | `3001` | Service port |
+| `ingress.enabled` | `false` | Enable Ingress |
+| `ingress.className` | `""` | Ingress class name |
+| `ingress.host` | `vm-migration.example.com` | Ingress hostname |
+| `ingress.tls` | `[]` | TLS configuration |
+| `route.enabled` | `false` | Enable OpenShift Route |
+| `route.host` | `""` | Route hostname (auto-generated if empty) |
+| `route.termination` | `edge` | TLS termination (`edge`, `passthrough`, `reencrypt`) |
+| `route.insecureEdgeTerminationPolicy` | `Redirect` | Redirect HTTP to HTTPS |
+| `resources.limits.cpu` | `500m` | CPU limit |
+| `resources.limits.memory` | `512Mi` | Memory limit |
+| `resources.requests.cpu` | `100m` | CPU request |
+| `resources.requests.memory` | `128Mi` | Memory request |
+| `autoscaling.enabled` | `false` | Enable HPA |
+| `autoscaling.minReplicas` | `1` | Minimum replicas |
+| `autoscaling.maxReplicas` | `5` | Maximum replicas |
+| `autoscaling.targetCPUUtilization` | `80` | Target CPU % for scaling |
+| `config.port` | `3001` | Application port |
+| `config.nodeEnv` | `production` | Node environment |
+| `config.logLevel` | `info` | Log level |
+| `platforms.vmware.enabled` | `false` | Auto-connect to vCenter on startup |
+| `platforms.vmware.endpoint` | `""` | vCenter URL |
+| `platforms.openshift.enabled` | `false` | Auto-connect to OpenShift on startup |
+| `platforms.openshift.endpoint` | `""` | OpenShift API URL |
+| `platforms.openshift.namespace` | `openshift-mtv` | MTV namespace |
+| `platforms.flasharray.enabled` | `false` | Auto-connect to FlashArray on startup |
+| `platforms.flasharray.endpoint` | `""` | FlashArray management URL |
+| `secrets.create` | `true` | Create credentials Secret |
+| `secrets.existingSecret` | `""` | Use an existing Secret instead |
+| `secrets.vmware.username` | `""` | vCenter username |
+| `secrets.vmware.password` | `""` | vCenter password |
+| `secrets.openshift.token` | `""` | OpenShift bearer token |
+| `secrets.flasharray.apiToken` | `""` | FlashArray API token |
+| `serviceAccount.create` | `true` | Create ServiceAccount |
+| `podSecurityContext.runAsNonRoot` | `true` | Run as non-root |
+| `nodeSelector` | `{}` | Node selector labels |
+| `tolerations` | `[]` | Pod tolerations |
+| `affinity` | `{}` | Pod affinity rules |
+
+---
+
+### Autoscaling
+
+```bash
+helm upgrade vm-migration oci://ghcr.io/mchenetz/charts/vm-migration-estimator \
+  --set autoscaling.enabled=true \
+  --set autoscaling.minReplicas=2 \
+  --set autoscaling.maxReplicas=10 \
+  --set autoscaling.targetCPUUtilization=70
+```
+
+### Upgrade
+
+```bash
+helm upgrade vm-migration oci://ghcr.io/mchenetz/charts/vm-migration-estimator \
+  --version 1.1.0 \
+  --reuse-values
+```
+
+To change a specific value during upgrade:
+
+```bash
+helm upgrade vm-migration oci://ghcr.io/mchenetz/charts/vm-migration-estimator \
+  --reuse-values \
+  --set replicaCount=3
+```
+
+### Uninstall
+
+```bash
+helm uninstall vm-migration
+```
+
+This removes all Kubernetes resources created by the chart. Persistent data is not created by this chart (stateless application).
+
+---
+
+## Getting Started (Development)
 
 ### Prerequisites
 - Node.js 18+
