@@ -241,6 +241,8 @@ helm install vm-migration oci://ghcr.io/mchenetz/charts/vm-migration-estimator \
   --set route.termination=reencrypt
 ```
 
+> **OpenShift SCC note**: The chart defaults omit `runAsUser` and `fsGroup` so that OpenShift's `restricted-v2` SCC automatically injects the namespace-allocated UID/GID. Do **not** set `podSecurityContext.runAsUser` or `podSecurityContext.fsGroup` when deploying on OpenShift unless you have bound an `anyuid` SCC to the service account.
+
 ---
 
 ### Connect to Infrastructure Platforms

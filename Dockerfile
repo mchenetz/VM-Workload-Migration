@@ -26,7 +26,9 @@ FROM node:22-alpine
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV HOME=/tmp
+# Set HOME and npm cache to /tmp so any UID (including OpenShift-assigned UIDs) can write to them
+ENV HOME=/tmp \
+    NPM_CONFIG_CACHE=/tmp/.npm
 
 # Copy package files and install all deps (tsx needed for runtime)
 COPY package.json package-lock.json ./
