@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "vm-migration-estimator.fullname" . }}
+  labels:
+    {{- include "vm-migration-estimator.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "vm-migration-estimator.selectorLabels" . | nindent 4 }}

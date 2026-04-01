@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "vm-migration-estimator.fullname" . }}-config
+  labels:
+    {{- include "vm-migration-estimator.labels" . | nindent 4 }}
+data:
+  PORT: {{ .Values.config.port | quote }}
+  NODE_ENV: {{ .Values.config.nodeEnv | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  {{- if .Values.platforms.vmware.enabled }}
+  VMWARE_ENDPOINT: {{ .Values.platforms.vmware.endpoint | quote }}
+  {{- end }}
+  {{- if .Values.platforms.openshift.enabled }}
+  OPENSHIFT_ENDPOINT: {{ .Values.platforms.openshift.endpoint | quote }}
+  OPENSHIFT_NAMESPACE: {{ .Values.platforms.openshift.namespace | quote }}
+  {{- end }}
+  {{- if .Values.platforms.flasharray.enabled }}
+  FLASHARRAY_ENDPOINT: {{ .Values.platforms.flasharray.endpoint | quote }}
+  {{- end }}

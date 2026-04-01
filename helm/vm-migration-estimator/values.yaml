@@ -1,0 +1,160 @@
+# -- Number of pod replicas
+replicaCount: 1
+
+image:
+  # -- Container image repository
+  repository: vm-migration-estimator
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Image tag (defaults to Chart appVersion)
+  tag: ""
+
+# -- Image pull secrets for private registries
+imagePullSecrets: []
+
+# -- Override release name
+nameOverride: ""
+# -- Override full release name
+fullnameOverride: ""
+
+serviceAccount:
+  # -- Create a ServiceAccount
+  create: true
+  # -- Annotations for the ServiceAccount
+  annotations: {}
+  # -- ServiceAccount name (auto-generated if empty)
+  name: ""
+
+# -- Pod annotations
+podAnnotations: {}
+
+# -- Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# -- Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  # -- Service type (ClusterIP, NodePort, LoadBalancer)
+  type: ClusterIP
+  # -- Service port
+  port: 3001
+
+ingress:
+  # -- Enable Ingress
+  enabled: false
+  # -- Ingress class name
+  className: ""
+  # -- Ingress annotations
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # cert-manager.io/cluster-issuer: letsencrypt
+  # -- Ingress host
+  host: vm-migration.example.com
+  # -- TLS configuration
+  tls: []
+  #  - secretName: vm-migration-tls
+  #    hosts:
+  #      - vm-migration.example.com
+
+# -- OpenShift Route (alternative to Ingress)
+route:
+  # -- Enable OpenShift Route
+  enabled: false
+  # -- Route host (auto-generated if empty)
+  host: ""
+  # -- TLS termination (edge, passthrough, reencrypt)
+  termination: edge
+  # -- Redirect insecure traffic
+  insecureEdgeTerminationPolicy: Redirect
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  # -- Enable HorizontalPodAutoscaler
+  enabled: false
+  # -- Minimum replicas
+  minReplicas: 1
+  # -- Maximum replicas
+  maxReplicas: 5
+  # -- Target CPU utilization percentage
+  targetCPUUtilization: 80
+  # -- Target memory utilization percentage (optional)
+  # targetMemoryUtilization: 80
+
+# -- Node selector for pod scheduling
+nodeSelector: {}
+
+# -- Tolerations for pod scheduling
+tolerations: []
+
+# -- Affinity rules for pod scheduling
+affinity: {}
+
+# ── Application Configuration ──
+
+config:
+  # -- Server port
+  port: 3001
+  # -- Node environment
+  nodeEnv: production
+  # -- Log level
+  logLevel: info
+
+# ── Platform Connections ──
+# Configure connections to VMware, OpenShift, and FlashArray.
+# Credentials are stored in a Kubernetes Secret.
+
+platforms:
+  vmware:
+    # -- Enable VMware vCenter auto-connection on startup
+    enabled: false
+    # -- vCenter endpoint URL
+    endpoint: ""
+  openshift:
+    # -- Enable OpenShift auto-connection on startup
+    enabled: false
+    # -- OpenShift API endpoint URL
+    endpoint: ""
+    # -- Namespace for MTV plans
+    namespace: "openshift-mtv"
+  flasharray:
+    # -- Enable FlashArray auto-connection on startup
+    enabled: false
+    # -- FlashArray management endpoint URL
+    endpoint: ""
+
+# ── Secrets ──
+# Platform credentials. For production, use an external secret manager
+# or set these via --set at install time.
+
+secrets:
+  # -- Create the credentials Secret
+  create: true
+  # -- Use an existing Secret instead (overrides create)
+  existingSecret: ""
+  vmware:
+    # -- vCenter username
+    username: ""
+    # -- vCenter password
+    password: ""
+  openshift:
+    # -- OpenShift bearer token
+    token: ""
+  flasharray:
+    # -- FlashArray API token
+    apiToken: ""

@@ -1,0 +1,16 @@
+apiVersion: v2
+name: vm-migration-estimator
+description: VM Workload Migration Time Estimator for OpenShift MTV/Forklift
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - vmware
+  - openshift
+  - migration
+  - forklift
+  - mtv
+  - flasharray
+home: https://github.com/mchenetz/VM-Workload-Migration
+maintainers:
+  - name: mchenetz

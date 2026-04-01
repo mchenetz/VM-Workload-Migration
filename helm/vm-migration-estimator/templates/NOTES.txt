@@ -1,0 +1,31 @@
+VM Workload Migration Time Estimator has been deployed!
+
+1. Get the application URL:
+{{- if .Values.ingress.enabled }}
+  http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.host }}
+{{- else if .Values.route.enabled }}
+  Run: oc get route {{ include "vm-migration-estimator.fullname" . }} -o jsonpath='{.spec.host}'
+{{- else if contains "NodePort" .Values.service.type }}
+  export NODE_PORT=$(kubectl get svc {{ include "vm-migration-estimator.fullname" . }} -o jsonpath='{.spec.ports[0].nodePort}')
+  export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[0].address}')
+  echo http://$NODE_IP:$NODE_PORT
+{{- else if contains "LoadBalancer" .Values.service.type }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+  kubectl get svc {{ include "vm-migration-estimator.fullname" . }} -w
+{{- else }}
+  kubectl port-forward svc/{{ include "vm-migration-estimator.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+  Open: http://localhost:{{ .Values.service.port }}
+{{- end }}
+
+2. Configure platform connections:
+   Navigate to the Configuration page in the UI to connect:
+   - VMware vCenter
+   - OpenShift cluster
+   - Pure Storage FlashArray
+
+   Or set credentials at install time:
+   helm upgrade {{ .Release.Name }} vm-migration-estimator \
+     --set platforms.vmware.enabled=true \
+     --set platforms.vmware.endpoint=https://vcenter.example.com \
+     --set secrets.vmware.username=admin \
+     --set secrets.vmware.password=secret
