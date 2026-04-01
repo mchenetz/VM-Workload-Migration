@@ -129,30 +129,29 @@ jobs:
           sed -i "s|repository:.*|repository: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}|" helm/vm-migration-estimator/values.yaml
           sed -i "s|tag:.*|tag: \"${{ needs.version.outputs.version }}\"|" helm/vm-migration-estimator/values.yaml
 
-      - name: Checkout gh-pages
+      - name: Package chart
+        run: |
+          helm package helm/vm-migration-estimator -d /tmp/helm-pkg
+
+      - name: Prepare gh-pages branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           if git ls-remote --heads origin gh-pages | grep -q gh-pages; then
             git fetch origin gh-pages
             git checkout gh-pages
-            git checkout main -- helm/
           else
             git checkout --orphan gh-pages
             git rm -rf . || true
-            git checkout main -- helm/
             echo "# Helm Chart Repository" > README.md
           fi
 
-      - name: Package and index
+      - name: Index and push
         run: |
-          helm package helm/vm-migration-estimator
+          cp /tmp/helm-pkg/*.tgz .
           helm repo index . --url https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
-
-      - name: Push gh-pages
-        run: |
           git add .
-          git commit -m "Release v${{ needs.version.outputs.version }}" || echo "No changes"
+          git commit -m "Release chart v${{ needs.version.outputs.version }}" || echo "No changes"
           git push origin gh-pages
 
   # ── GitHub Release ──
