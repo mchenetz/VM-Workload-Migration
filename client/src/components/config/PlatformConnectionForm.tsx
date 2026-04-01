@@ -136,7 +136,7 @@ function getDefaultCredentials(type: PlatformType): Record<string, string> {
     case 'vmware':
       return { username: '', password: '', datacenter: '' };
     case 'openshift':
-      return { bearerToken: '', namespace: 'openshift-mtv' };
+      return { token: '', namespace: 'openshift-mtv' };
     case 'flasharray':
       return { apiToken: '' };
   }
@@ -208,8 +208,8 @@ function renderFields(
             <label className={labelClass}>Bearer Token</label>
             <input
               type="password"
-              value={credentials.bearerToken}
-              onChange={(e) => updateCredential('bearerToken', e.target.value)}
+              value={credentials.token}
+              onChange={(e) => updateCredential('token', e.target.value)}
               className={inputClass}
             />
           </div>
