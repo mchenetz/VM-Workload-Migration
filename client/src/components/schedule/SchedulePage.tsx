@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AppShell } from '../layout/AppShell';
 import { Card } from '../shared/Card';
 import { useAppStore } from '../../store/index';
@@ -72,7 +72,8 @@ interface DragInfo { vmId: string; fromDate: string }
 interface CalendarProps {
   schedule: MigrationSchedule;
   selectedDate: string | null;
-  dragInfo: DragInfo | null;
+  dragInfo: DragInfo | null;         // React state — for visual classes only
+  getDragInfo: () => DragInfo | null; // ref-backed — always current during events
   dragOverDate: string | null;
   onSelectDate: (date: string) => void;
   onRemoveDay: (date: string) => void;
@@ -81,12 +82,12 @@ interface CalendarProps {
 }
 
 function ScheduleCalendar({
-  schedule, selectedDate, dragInfo, dragOverDate,
+  schedule, selectedDate, dragInfo, getDragInfo, dragOverDate,
   onSelectDate, onRemoveDay, onDragOverDate, onDropOnDate,
 }: CalendarProps) {
   const windowByDate = new Map(schedule.windows.map((w) => [w.date, w]));
   const months = getMonthsInRange(schedule.startDate, schedule.completionDate);
-  const isDragging = dragInfo !== null;
+  const isDragging = dragInfo !== null; // visual only — may lag one frame behind
 
   return (
     <div className="space-y-6">
@@ -137,12 +138,22 @@ function ScheduleCalendar({
                     key={date}
                     className={cellClass}
                     onClick={() => {
-                      if (isDragging && isDragTarget) { onDropOnDate(date); return; }
                       if (win) onSelectDate(date);
                     }}
-                    onDragOver={(e) => { if (isDragTarget) { e.preventDefault(); onDragOverDate(date); } }}
+                    onDragOver={(e) => {
+                      // Read from ref — always current, even on first event after dragstart
+                      const di = getDragInfo();
+                      if (win && di && di.fromDate !== date) {
+                        e.preventDefault();
+                        onDragOverDate(date);
+                      }
+                    }}
                     onDragLeave={() => { if (dragOverDate === date) onDragOverDate(null); }}
-                    onDrop={(e) => { e.preventDefault(); if (isDragTarget) onDropOnDate(date); }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const di = getDragInfo();
+                      if (win && di && di.fromDate !== date) onDropOnDate(date);
+                    }}
                     title={win ? `${win.vms.length} VM(s) — ${formatMinutes(win.totalMinutes)}` : undefined}
                   >
                     <span className="text-xs">{dayNum}</span>
@@ -186,6 +197,7 @@ interface WindowDetailProps {
   availableMethods: VMSourceInfo['availableMethods'];
   vmOverrides: Record<string, MigrationMethod>;
   dragInfo: DragInfo | null;
+  getDragInfo: () => DragInfo | null;
   onMoveVM: (fromIdx: number, toIdx: number, vmId: string) => void;
   onOverrideMethod: (vmId: string, method: MigrationMethod) => void;
   onDragStartVM: (e: React.DragEvent, vmId: string, fromDate: string) => void;
@@ -195,19 +207,26 @@ interface WindowDetailProps {
 }
 
 function WindowDetail({
-  window: win, windowIndex, totalWindows, availableMethods, vmOverrides, dragInfo,
+  window: win, windowIndex, totalWindows, availableMethods, vmOverrides, dragInfo, getDragInfo,
   onMoveVM, onOverrideMethod, onDragStartVM, onDragEnd, onDropVM, onRemoveDay,
 }: WindowDetailProps) {
   const [dropTarget, setDropTarget] = useState(false);
   const compatibleMethods = availableMethods.filter((m) => m.compatible);
   const showMethodOverride = compatibleMethods.length > 1;
-  const isDroppable = dragInfo !== null && dragInfo.fromDate !== win.date;
 
   return (
     <div
-      onDragOver={(e) => { if (isDroppable) { e.preventDefault(); setDropTarget(true); } }}
+      onDragOver={(e) => {
+        const di = getDragInfo();
+        if (di && di.fromDate !== win.date) { e.preventDefault(); setDropTarget(true); }
+      }}
       onDragLeave={() => setDropTarget(false)}
-      onDrop={(e) => { e.preventDefault(); setDropTarget(false); if (isDroppable) onDropVM(win.date); }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDropTarget(false);
+        const di = getDragInfo();
+        if (di && di.fromDate !== win.date) onDropVM(win.date);
+      }}
       className={`transition-all rounded-lg ${dropTarget ? 'ring-2 ring-teal-400 bg-teal-900/20 p-2' : ''}`}
     >
       <div className="flex items-center justify-between mb-3">
@@ -341,6 +360,10 @@ export function SchedulePage() {
   const [vmOverrides, setVmOverrides] = useState<Record<string, MigrationMethod>>({});
   const [dragInfo, setDragInfo] = useState<DragInfo | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+  // Ref-backed version of dragInfo — updates synchronously so onDragOver
+  // events can read it before React has flushed the setState from onDragStart.
+  const dragInfoRef = useRef<DragInfo | null>(null);
+  const getDragInfo = () => dragInfoRef.current;
 
   // Load VM source info on mount
   useEffect(() => {
@@ -441,17 +464,21 @@ export function SchedulePage() {
   function handleDragStartVM(e: React.DragEvent, vmId: string, fromDate: string) {
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', `${vmId}|${fromDate}`);
-    setDragInfo({ vmId, fromDate });
+    // Update ref synchronously — available immediately in the next onDragOver event
+    dragInfoRef.current = { vmId, fromDate };
+    setDragInfo({ vmId, fromDate }); // triggers visual re-render (may lag one frame)
   }
 
   function handleDragEnd() {
+    dragInfoRef.current = null;
     setDragInfo(null);
     setDragOverDate(null);
   }
 
   function handleDropOnDate(toDate: string) {
-    if (!schedule || !dragInfo) return;
-    const { vmId, fromDate } = dragInfo;
+    const di = dragInfoRef.current; // always current, even if React state lagged
+    if (!schedule || !di) return;
+    const { vmId, fromDate } = di;
     if (fromDate === toDate) { handleDragEnd(); return; }
     const fromIdx = schedule.windows.findIndex((w) => w.date === fromDate);
     const toIdx = schedule.windows.findIndex((w) => w.date === toDate);
@@ -517,6 +544,7 @@ export function SchedulePage() {
     availableMethods: vmSource.availableMethods,
     vmOverrides,
     dragInfo,
+    getDragInfo,
     onMoveVM: handleMoveVM,
     onOverrideMethod: handleOverrideMethod,
     onDragStartVM: handleDragStartVM,
@@ -689,6 +717,7 @@ export function SchedulePage() {
                   schedule={schedule}
                   selectedDate={selectedDate}
                   dragInfo={dragInfo}
+                  getDragInfo={getDragInfo}
                   dragOverDate={dragOverDate}
                   onSelectDate={setSelectedDate}
                   onRemoveDay={handleRemoveDay}
