@@ -25,21 +25,25 @@ function parsePowerState(state: string): VM['powerState'] {
 }
 
 /**
- * Parse a vCenter CSV export with columns:
- * Name, State, Status, Provisioned Space, Used Space, Host CPU, Host Mem
+ * Parse a vCenter CSV export. Recognized columns (case-insensitive):
+ *   Name, State, Provisioned Space, Host Mem, Guest OS, CPUs, NICs
+ * All columns are optional except Name.
  */
 export function parseVCenterCSV(text: string): VM[] {
   const lines = text.split(/\r?\n/).filter((l) => l.trim());
   if (lines.length < 2) return [];
 
-  // Find header row
   const header = lines[0].split(',').map((h) => h.trim().toLowerCase());
-  const col = (name: string) => header.indexOf(name);
+  const col = (needle: string) => header.indexOf(needle);
+  const colContains = (substr: string) => header.findIndex((h) => h.includes(substr));
 
-  const nameIdx = col('name');
-  const stateIdx = col('state');
-  const provisionedIdx = header.findIndex((h) => h.includes('provisioned'));
-  const memIdx = header.findIndex((h) => h.includes('mem'));
+  const nameIdx      = col('name');
+  const stateIdx     = col('state');
+  const provisionedIdx = colContains('provisioned');
+  const memIdx       = colContains('mem');
+  const guestOSIdx   = colContains('guest os');
+  const cpuIdx       = col('cpus');
+  const nicIdx       = col('nics');
 
   if (nameIdx === -1) return [];
 
@@ -52,18 +56,20 @@ export function parseVCenterCSV(text: string): VM[] {
     const name = parts[nameIdx]?.trim();
     if (!name) continue;
 
-    const powerState = stateIdx !== -1 ? parsePowerState(parts[stateIdx] ?? '') : 'poweredOff';
+    const powerState     = stateIdx     !== -1 ? parsePowerState(parts[stateIdx]     ?? '') : 'poweredOff';
     const totalDiskSizeGB = provisionedIdx !== -1 ? parseSizeGB(parts[provisionedIdx] ?? '') : 0;
-    const memoryGB = memIdx !== -1 ? parseSizeGB(parts[memIdx] ?? '') : 0;
+    const memoryGB       = memIdx       !== -1 ? parseSizeGB(parts[memIdx]           ?? '') : 0;
+    const guestOS        = guestOSIdx   !== -1 ? (parts[guestOSIdx]?.trim() || 'unknown') : 'unknown';
+    const vCPUs          = cpuIdx       !== -1 ? (parseInt(parts[cpuIdx] ?? '0', 10) || 0) : 0;
 
     const id = `csv-${name.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}-${i}`;
 
-    vms.push({
+    const vm: VM = {
       id,
       name,
-      guestOS: 'unknown',
+      guestOS,
       powerState,
-      vCPUs: 0,
+      vCPUs,
       memoryGB: parseFloat(memoryGB.toFixed(2)),
       disks: [
         {
@@ -78,7 +84,15 @@ export function parseVCenterCSV(text: string): VM[] {
       datastoreName: 'imported',
       resourcePool: '',
       network: '',
-    });
+    };
+
+    // Attach NIC count as network hint if available
+    if (nicIdx !== -1) {
+      const nics = parseInt(parts[nicIdx] ?? '0', 10);
+      if (nics > 0) vm.network = `${nics} NIC${nics > 1 ? 's' : ''}`;
+    }
+
+    vms.push(vm);
   }
 
   return vms;
