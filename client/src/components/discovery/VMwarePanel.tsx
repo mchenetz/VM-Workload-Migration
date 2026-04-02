@@ -1,11 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useAppStore } from '../../store';
-import { discoverVMwareVMs } from '../../api/discovery';
+import { discoverVMwareVMs, importVMsToServer } from '../../api/discovery';
 import { formatBytes } from '../../utils/formatters';
 import { Card } from '../shared/Card';
 import { StatusDot } from '../shared/StatusDot';
 import { EmptyState } from '../shared/EmptyState';
 import { LoadingSpinner } from '../shared/LoadingSpinner';
+import { parseVCenterCSV } from '../../utils/csvImport';
 import type { VM } from '../../types/vm';
 
 const POWER_STATE_STATUS = {
@@ -52,7 +53,10 @@ function CompatibilityBadges({ vm }: { vm: VM }) {
 
 export function VMwarePanel() {
   const [loading, setLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const discoveredVMs = useAppStore((s) => s.discoveredVMs);
   const setDiscoveredVMs = useAppStore((s) => s.setDiscoveredVMs);
@@ -62,6 +66,29 @@ export function VMwarePanel() {
   );
 
   const isConnected = vmwarePlatform?.status === 'connected';
+
+  const handleCSVImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setImportError(null);
+    try {
+      const text = await file.text();
+      const vms = parseVCenterCSV(text);
+      if (vms.length === 0) {
+        setImportError('No VMs found in CSV. Ensure it has Name and State columns.');
+        return;
+      }
+      await importVMsToServer(vms);
+      setDiscoveredVMs(vms);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setImporting(false);
+      // Reset so the same file can be re-imported
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   const filteredVMs = useMemo(() => {
     const sorted = [...discoveredVMs].sort((a, b) =>
@@ -90,49 +117,94 @@ export function VMwarePanel() {
     }
   };
 
+  const csvButton = (
+    <button
+      onClick={() => fileInputRef.current?.click()}
+      disabled={importing}
+      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-sm transition"
+    >
+      {importing ? 'Importing…' : 'Import CSV'}
+    </button>
+  );
+
   if (loading) return <LoadingSpinner />;
+
+  const hiddenInput = (
+    <input
+      ref={fileInputRef}
+      type="file"
+      accept=".csv"
+      className="hidden"
+      onChange={handleCSVImport}
+    />
+  );
 
   if (discoveredVMs.length === 0 && !isConnected) {
     return (
-      <EmptyState
-        icon="🔌"
-        title="VMware Not Connected"
-        description="Connect to vCenter in Configuration to discover VMs"
-      />
+      <div className="space-y-4">
+        {hiddenInput}
+        <EmptyState
+          icon="🔌"
+          title="VMware Not Connected"
+          description="Connect to vCenter in Configuration to discover VMs, or import a vCenter CSV export."
+          action={
+            <div className="flex flex-col items-center gap-3">
+              {csvButton}
+              {importError && <p className="text-xs text-red-400">{importError}</p>}
+              <p className="text-xs text-slate-500">
+                Export from vCenter: VMs &amp; Templates view → Export CSV
+              </p>
+            </div>
+          }
+        />
+      </div>
     );
   }
 
   if (discoveredVMs.length === 0) {
     return (
-      <EmptyState
-        icon="🔍"
-        title="No VMs Discovered"
-        description="No VMs discovered. Click Refresh to scan."
-        action={
-          <button
-            onClick={handleRefresh}
-            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition"
-          >
-            Refresh
-          </button>
-        }
-      />
+      <div className="space-y-4">
+        {hiddenInput}
+        <EmptyState
+          icon="🔍"
+          title="No VMs Discovered"
+          description="No VMs discovered. Click Refresh to scan or import a CSV."
+          action={
+            <div className="flex gap-3 items-center">
+              <button
+                onClick={handleRefresh}
+                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition"
+              >
+                Refresh
+              </button>
+              {csvButton}
+            </div>
+          }
+        />
+        {importError && <p className="text-xs text-red-400 text-center">{importError}</p>}
+      </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      {hiddenInput}
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-sm text-slate-400">
-          {discoveredVMs.length} VMs discovered | {formatBytes(totalDisk)} total
-          storage
+          {discoveredVMs.length} VMs {discoveredVMs[0]?.datastoreName === 'imported' ? '(imported)' : 'discovered'} | {formatBytes(totalDisk)} total storage
         </p>
-        <button
-          onClick={handleRefresh}
-          className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-sm transition"
-        >
-          Refresh
-        </button>
+        <div className="flex gap-2 items-center">
+          {importError && <p className="text-xs text-red-400">{importError}</p>}
+          {csvButton}
+          {isConnected && (
+            <button
+              onClick={handleRefresh}
+              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-sm transition"
+            >
+              Refresh
+            </button>
+          )}
+        </div>
       </div>
 
       <input

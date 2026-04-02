@@ -19,3 +19,8 @@ export async function getCompatibility() {
   const { data } = await api.get('/discovery/compatibility');
   return data.data;
 }
+
+export async function importVMsToServer(vms: unknown[]): Promise<{ imported: number }> {
+  const { data } = await api.post('/discovery/vmware/import', { vms });
+  return data.data;
+}

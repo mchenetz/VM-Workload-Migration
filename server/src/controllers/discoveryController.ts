@@ -148,3 +148,9 @@ export function getCompatibility(): CompatibilityResult[] {
 export function getCachedVMs(): VM[] {
   return cachedVMs;
 }
+
+export function importVMs(vms: VM[]): void {
+  cachedVMs = vms;
+  // Reset datastores to empty when using imported VMs
+  cachedDatastores = [];
+}
