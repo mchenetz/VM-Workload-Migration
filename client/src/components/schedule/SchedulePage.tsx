@@ -360,6 +360,7 @@ export function SchedulePage() {
   const [vmOverrides, setVmOverrides] = useState<Record<string, MigrationMethod>>({});
   const [dragInfo, setDragInfo] = useState<DragInfo | null>(null);
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+  const [rowDragOverDate, setRowDragOverDate] = useState<string | null>(null);
   // Ref-backed version of dragInfo — updates synchronously so onDragOver
   // events can read it before React has flushed the setState from onDragStart.
   const dragInfoRef = useRef<DragInfo | null>(null);
@@ -473,6 +474,7 @@ export function SchedulePage() {
     dragInfoRef.current = null;
     setDragInfo(null);
     setDragOverDate(null);
+    setRowDragOverDate(null);
   }
 
   function handleDropOnDate(toDate: string) {
@@ -742,24 +744,56 @@ export function SchedulePage() {
               <Card>
                 <h3 className="text-sm font-semibold text-slate-300 mb-4">All Migration Windows</h3>
                 <div className="space-y-3">
-                  {schedule.windows.map((win, idx) => (
+                  {schedule.windows.map((win, idx) => {
+                    const isRowDragOver = rowDragOverDate === win.date;
+                    const isDragSource = dragInfo?.fromDate === win.date;
+                    return (
                     <div
                       key={win.date}
-                      className={`rounded-lg border p-3 transition-colors ${
-                        selectedDate === win.date
+                      className={`rounded-lg border p-3 transition-all ${
+                        isRowDragOver
+                          ? 'border-teal-400 bg-teal-900/30 ring-2 ring-teal-400/50'
+                          : selectedDate === win.date
                           ? 'border-blue-500 bg-blue-900/20'
+                          : isDragSource
+                          ? 'border-slate-600 bg-slate-800/50 opacity-60'
                           : 'border-slate-700 hover:border-slate-600'
                       }`}
+                      onDragOver={(e) => {
+                        const di = getDragInfo();
+                        if (di && di.fromDate !== win.date) {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = 'move';
+                          setRowDragOverDate(win.date);
+                        }
+                      }}
+                      onDragLeave={(e) => {
+                        // Only clear if leaving the row itself, not a child
+                        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                          setRowDragOverDate(null);
+                        }
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setRowDragOverDate(null);
+                        const di = getDragInfo();
+                        if (di && di.fromDate !== win.date) {
+                          handleDropOnDate(win.date);
+                        }
+                      }}
                     >
                       <div
                         className="flex items-center justify-between cursor-pointer"
                         onClick={() => setSelectedDate(win.date === selectedDate ? null : win.date)}
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
+                          <div className={`w-2 h-2 rounded-full shrink-0 ${isRowDragOver ? 'bg-teal-400' : 'bg-blue-400'}`} />
                           <div>
                             <span className="text-sm font-medium text-slate-200">{win.date}</span>
                             <span className="text-xs text-slate-500 ml-2">{win.windowStart}–{win.windowEnd}</span>
+                            {isRowDragOver && (
+                              <span className="ml-2 text-xs text-teal-400 font-medium">Drop to move here</span>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-3 text-xs text-slate-400">
@@ -785,7 +819,8 @@ export function SchedulePage() {
                         </div>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </Card>
             </>
