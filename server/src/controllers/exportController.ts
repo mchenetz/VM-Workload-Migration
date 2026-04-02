@@ -37,6 +37,39 @@ const fonts = {
 
 const printer = new PdfPrinter(fonts);
 
+// ── VM Difficulty scoring ─────────────────────────────────────────────────────
+
+type DifficultyTier = 'Easy' | 'Medium' | 'Hard' | 'Complex';
+
+function scoreVMDifficulty(vm: {
+  guestOS: string; powerState: string; diskSizeGB: number;
+  diskCount: number; vCPUs: number; memoryGB: number; network: string;
+}): { tier: DifficultyTier; score: number } {
+  let score = 0;
+  const g = (vm.guestOS ?? '').toLowerCase();
+  if (g.includes('windows server') || g.includes('windows nt')) score += 2;
+  else if (g.includes('windows')) score += 1;
+  else if (
+    g.includes('freebsd') || g.includes('photon') || g.includes('solaris') ||
+    g.includes('other') || g.includes('appliance') || g === 'unknown' || g === ''
+  ) score += 3;
+  if (vm.powerState === 'poweredOn') score += 1;
+  if (vm.diskSizeGB >= 1024) score += 2;
+  else if (vm.diskSizeGB >= 500) score += 1;
+  if (vm.diskCount > 4) score += 1;
+  if (vm.vCPUs > 16) score += 1;
+  if (vm.memoryGB > 64) score += 1;
+  const nicMatch = (vm.network ?? '').match(/^(\d+)\s*NIC/i);
+  if (nicMatch && parseInt(nicMatch[1], 10) > 1) score += 1;
+
+  let tier: DifficultyTier;
+  if (score <= 1)      tier = 'Easy';
+  else if (score <= 3) tier = 'Medium';
+  else if (score <= 5) tier = 'Hard';
+  else                 tier = 'Complex';
+  return { tier, score };
+}
+
 // ── Chart & Calendar helpers ──────────────────────────────────────────────────
 
 function escXml(s: string): string {
@@ -553,6 +586,38 @@ export async function generateSchedulePDF(
     content.push({ text: '', margin: [0, 0, 0, 8] });
   }
 
+  // ── Difficulty Distribution ──
+  const diffCounts: Record<DifficultyTier, number> = { Easy: 0, Medium: 0, Hard: 0, Complex: 0 };
+  for (const vm of allVMs) {
+    const { tier } = scoreVMDifficulty({
+      guestOS: vm.guestOS, powerState: vm.powerState,
+      diskSizeGB: vm.diskSizeGB, diskCount: vm.diskCount,
+      vCPUs: vm.vCPUs, memoryGB: vm.memoryGB, network: vm.network,
+    });
+    diffCounts[tier]++;
+  }
+  const diffItems = (
+    [
+      { tier: 'Easy' as DifficultyTier,    color: '#16a34a' },
+      { tier: 'Medium' as DifficultyTier,  color: '#ca8a04' },
+      { tier: 'Hard' as DifficultyTier,    color: '#ea580c' },
+      { tier: 'Complex' as DifficultyTier, color: '#dc2626' },
+    ] as const
+  ).filter(d => diffCounts[d.tier] > 0);
+  if (diffItems.length > 0) {
+    content.push({ text: 'VM Migration Difficulty', style: 'chartTitle', margin: [0, 0, 0, 6] });
+    content.push(hBarChart(
+      diffItems.map(d => ({
+        label: d.tier,
+        value: diffCounts[d.tier],
+        color: d.color,
+        valueLabel: `${diffCounts[d.tier]} VM${diffCounts[d.tier] !== 1 ? 's' : ''}`,
+      })),
+      515,
+    ));
+    content.push({ text: '', margin: [0, 0, 0, 8] });
+  }
+
   // ── Calendar Grid ──
   content.push({ text: '', pageBreak: 'before' });
   content.push({ text: 'Migration Calendar', style: 'heading', margin: [0, 0, 0, 8] });
@@ -622,6 +687,8 @@ export async function generateSchedulePDF(
     const vmRows: TableCell[][] = [
       [
         { text: 'VM Name',    style: 'tableHeader' },
+        { text: 'Guest OS',   style: 'tableHeader' },
+        { text: 'Difficulty', style: 'tableHeader' },
         { text: 'Disk (GB)',  style: 'tableHeader' },
         { text: 'Est. Time',  style: 'tableHeader' },
         { text: 'Method',     style: 'tableHeader' },
@@ -630,15 +697,25 @@ export async function generateSchedulePDF(
     for (const vm of win.vms) {
       const h = Math.floor(vm.estimatedMinutes / 60);
       const m = vm.estimatedMinutes % 60;
+      const { tier } = scoreVMDifficulty({
+        guestOS: vm.guestOS, powerState: vm.powerState,
+        diskSizeGB: vm.diskSizeGB, diskCount: vm.diskCount,
+        vCPUs: vm.vCPUs, memoryGB: vm.memoryGB, network: vm.network,
+      });
+      const tierColor: Record<DifficultyTier, string> = {
+        Easy: '#16a34a', Medium: '#ca8a04', Hard: '#ea580c', Complex: '#dc2626',
+      };
       vmRows.push([
         vm.vmName,
+        { text: vm.guestOS || 'unknown', color: '#64748b' },
+        { text: tier, color: tierColor[tier], bold: true },
         vm.diskSizeGB.toFixed(1),
         h > 0 ? `${h}h ${m}m` : `${m}m`,
         vm.method === 'xcopy' ? 'XCopy' : 'Net Copy',
       ]);
     }
     content.push({
-      table: { headerRows: 1, widths: ['*', 'auto', 'auto', 'auto'], body: vmRows },
+      table: { headerRows: 1, widths: ['*', 'auto', 'auto', 'auto', 'auto', 'auto'], body: vmRows },
       layout: 'lightHorizontalLines',
       margin: [0, 0, 0, 8] as [number, number, number, number],
     });

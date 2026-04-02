@@ -3,6 +3,7 @@ import { AppShell } from '../layout/AppShell';
 import { Card } from '../shared/Card';
 import { useAppStore } from '../../store/index';
 import { generateSchedule, exportSchedulePDF } from '../../api/scheduleApi';
+import { scoreScheduledVM, TIER_STYLE } from '../../utils/vmDifficulty';
 import type { ScheduleParams, MigrationSchedule, ScheduleWindow } from '../../types/calculation';
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -144,13 +145,17 @@ function WindowDetail({ window: win, windowIndex, totalWindows, onMoveVM }: Wind
           const hrs = Math.floor(vm.estimatedMinutes / 60);
           const mins = vm.estimatedMinutes % 60;
           const timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+          const { tier } = scoreScheduledVM(vm);
           return (
             <div
               key={vm.vmId}
               className="flex items-center gap-3 rounded-lg bg-slate-700/50 px-3 py-2"
             >
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-slate-200 truncate">{vm.vmName}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-slate-200 truncate">{vm.vmName}</p>
+                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium shrink-0 ${TIER_STYLE[tier]}`}>{tier}</span>
+                </div>
                 <p className="text-xs text-slate-400">
                   {vm.diskSizeGB.toFixed(1)} GB &bull; {timeStr} &bull;{' '}
                   {vm.method === 'xcopy' ? 'XCopy' : 'Net Copy'}

@@ -7,6 +7,7 @@ import { StatusDot } from '../shared/StatusDot';
 import { EmptyState } from '../shared/EmptyState';
 import { LoadingSpinner } from '../shared/LoadingSpinner';
 import { parseVCenterCSV } from '../../utils/csvImport';
+import { scoreVM, TIER_STYLE } from '../../utils/vmDifficulty';
 import type { VM } from '../../types/vm';
 
 const POWER_STATE_STATUS = {
@@ -47,6 +48,27 @@ function CompatibilityBadges({ vm }: { vm: VM }) {
           {b.label}
         </span>
       ))}
+    </div>
+  );
+}
+
+function DifficultyBadge({ vm }: { vm: VM }) {
+  const { tier, score, reasons } = scoreVM(vm);
+  return (
+    <div className="group relative inline-block">
+      <span className={`px-2 py-0.5 rounded text-xs font-medium cursor-default ${TIER_STYLE[tier]}`}>
+        {tier}
+      </span>
+      {/* Tooltip */}
+      <div className="absolute z-10 left-0 top-full mt-1 hidden group-hover:block w-56 bg-slate-900 border border-slate-700 rounded-lg p-2 shadow-xl text-xs text-slate-300">
+        <p className="font-semibold mb-1 text-slate-200">Score: {score}</p>
+        {reasons.length === 0
+          ? <p className="text-slate-500">No complexity factors</p>
+          : <ul className="space-y-0.5">
+              {reasons.map((r) => <li key={r} className="text-slate-400">• {r}</li>)}
+            </ul>
+        }
+      </div>
     </div>
   );
 }
@@ -227,6 +249,7 @@ export function VMwarePanel() {
                 <th className="px-4 py-3 font-medium text-right">Memory</th>
                 <th className="px-4 py-3 font-medium text-right">Total Disk</th>
                 <th className="px-4 py-3 font-medium">Datastore</th>
+                <th className="px-4 py-3 font-medium">Difficulty</th>
                 <th className="px-4 py-3 font-medium">Compatibility</th>
               </tr>
             </thead>
@@ -259,6 +282,9 @@ export function VMwarePanel() {
                   </td>
                   <td className="px-4 py-3 text-slate-400 text-sm">
                     {vm.datastoreName}
+                  </td>
+                  <td className="px-4 py-3">
+                    <DifficultyBadge vm={vm} />
                   </td>
                   <td className="px-4 py-3">
                     <CompatibilityBadges vm={vm} />

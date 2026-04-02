@@ -80,6 +80,12 @@ export interface ScheduleParams {
 export interface ScheduledVM {
   vmId: string;
   vmName: string;
+  guestOS: string;
+  vCPUs: number;
+  memoryGB: number;
+  diskCount: number;
+  network: string;
+  powerState: 'poweredOn' | 'poweredOff' | 'suspended';
   diskSizeGB: number;
   estimatedMinutes: number;
   method: MigrationMethod;

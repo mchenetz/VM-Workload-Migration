@@ -27,6 +27,12 @@ export function buildSchedule(
     return {
       vmId: vm.id,
       vmName: vm.name,
+      guestOS: vm.guestOS,
+      vCPUs: vm.vCPUs,
+      memoryGB: vm.memoryGB,
+      diskCount: vm.disks.length,
+      network: vm.network,
+      powerState: vm.powerState,
       diskSizeGB: vm.totalDiskSizeGB,
       estimatedMinutes,
       method: preferredResult.method,
