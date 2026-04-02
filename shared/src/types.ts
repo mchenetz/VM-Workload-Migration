@@ -85,7 +85,7 @@ export type PlatformCredentials =
 
 // ── Calculation ──
 
-export type MigrationMethod = 'network_copy' | 'xcopy' | 'flasharray_copy';
+export type MigrationMethod = 'network_copy' | 'xcopy';
 
 export interface TuningParams {
   concurrentTransfers: number;
@@ -185,6 +185,55 @@ export interface CompatibilityResult {
   xcopyReason?: string;
   flasharrayCopy: boolean;
   flasharrayReason?: string;
+}
+
+// ── Migration Schedule ──
+
+export interface ScheduleWindow {
+  /** ISO date string e.g. "2026-04-07" */
+  date: string;
+  /** HH:MM 24-hour start of migration window */
+  windowStart: string;
+  /** HH:MM 24-hour end of migration window */
+  windowEnd: string;
+  /** VMs assigned to this window */
+  vms: ScheduledVM[];
+  /** Total estimated minutes for all VMs in this window */
+  totalMinutes: number;
+}
+
+export interface ScheduledVM {
+  vmId: string;
+  vmName: string;
+  diskSizeGB: number;
+  estimatedMinutes: number;
+  method: MigrationMethod;
+}
+
+export interface MigrationSchedule {
+  /** ISO date the schedule was generated */
+  generatedAt: string;
+  startDate: string;
+  completionDate: string;
+  totalDays: number;
+  windows: ScheduleWindow[];
+  params: ScheduleParams;
+}
+
+export interface ScheduleParams {
+  startDate: string;
+  /** HH:MM daily window start */
+  windowStart: string;
+  /** HH:MM daily window end */
+  windowEnd: string;
+  /** Days of the week to schedule (0=Sun … 6=Sat) */
+  workDays: number[];
+  /** Max concurrent migrations per window */
+  maxConcurrent: number;
+  /** Preferred migration method */
+  preferredMethod: MigrationMethod;
+  /** Buffer between VM migrations in minutes */
+  bufferMinutes: number;
 }
 
 // ── PDF Export ──

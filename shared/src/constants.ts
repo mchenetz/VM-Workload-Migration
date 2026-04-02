@@ -3,19 +3,16 @@ import type { MigrationMethod } from './types.js';
 export const METHOD_LABELS: Record<MigrationMethod, string> = {
   network_copy: 'Network Copy (VDDK)',
   xcopy: 'XCopy (VAAI)',
-  flasharray_copy: 'FlashArray Volume Copy',
 };
 
 export const METHOD_COLORS: Record<MigrationMethod, string> = {
-  network_copy: '#3b82f6',    // blue-500
-  xcopy: '#a855f7',           // purple-500
-  flasharray_copy: '#22c55e', // green-500
+  network_copy: '#3b82f6',  // blue-500
+  xcopy: '#a855f7',         // purple-500
 };
 
 export const METHOD_DESCRIPTIONS: Record<MigrationMethod, string> = {
   network_copy: 'Standard Forklift method. Transfers VM disks over the network via VMware VDDK.',
   xcopy: 'VMware VAAI storage primitive. Offloads copy to the storage array for faster transfers.',
-  flasharray_copy: 'Pure Storage FlashArray volume-level clone. Near-instantaneous for same-array.',
 };
 
 // Unit conversions
@@ -36,4 +33,4 @@ export const DEFAULT_TUNING = {
   daysSinceCutover: 1,
 };
 
-export const ALL_METHODS: MigrationMethod[] = ['network_copy', 'xcopy', 'flasharray_copy'];
+export const ALL_METHODS: MigrationMethod[] = ['network_copy', 'xcopy'];

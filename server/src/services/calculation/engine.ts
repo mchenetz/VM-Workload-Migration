@@ -2,7 +2,6 @@ import type { VM, TuningParams, MigrationMethod, CalculationResult } from '@vm-m
 import { METHOD_LABELS } from '@vm-migration/shared';
 import { calculateNetworkCopy } from './networkCopy.js';
 import { calculateXCopy } from './xcopy.js';
-import { calculateFlashArrayCopy } from './flasharrayCopy.js';
 import { detectBottlenecks } from './bottleneckDetector.js';
 import { getRecommendations } from './optimizer.js';
 export { formatTime } from './utils.js';
@@ -10,7 +9,6 @@ export { formatTime } from './utils.js';
 const calculators: Record<MigrationMethod, (vms: VM[], tuning: TuningParams) => CalculationResult> = {
   network_copy: calculateNetworkCopy,
   xcopy: calculateXCopy,
-  flasharray_copy: calculateFlashArrayCopy,
 };
 
 export interface CalculationSummary {

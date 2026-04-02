@@ -22,7 +22,7 @@ const tuningParamsSchema = z.object({
   daysSinceCutover: z.number().int().nonnegative().optional(),
 });
 
-const migrationMethodSchema = z.enum(['network_copy', 'xcopy', 'flasharray_copy']);
+const migrationMethodSchema = z.enum(['network_copy', 'xcopy']);
 
 export const manualCalcSchema = z.object({
   vmCount: z.number().int().positive(),
@@ -70,6 +70,29 @@ const exportOptionsSchema = z.object({
 export const exportSchema = z.object({
   results: z.array(calculationResultSchema),
   options: exportOptionsSchema,
+});
+
+// ── Schedule ──
+
+const scheduleParamsSchema = z.object({
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'startDate must be YYYY-MM-DD'),
+  windowStart: z.string().regex(/^\d{2}:\d{2}$/, 'windowStart must be HH:MM'),
+  windowEnd: z.string().regex(/^\d{2}:\d{2}$/, 'windowEnd must be HH:MM'),
+  workDays: z.array(z.number().int().min(0).max(6)),
+  maxConcurrent: z.number().int().positive(),
+  preferredMethod: migrationMethodSchema,
+  bufferMinutes: z.number().int().nonnegative(),
+});
+
+export const scheduleGenerateSchema = z.object({
+  params: scheduleParamsSchema,
+  results: z.array(calculationResultSchema).optional(),
+});
+
+export const schedulePdfSchema = z.object({
+  schedule: z.object({}).passthrough(),
+  projectName: z.string().min(1),
+  companyName: z.string().optional(),
 });
 
 // ── Middleware ──

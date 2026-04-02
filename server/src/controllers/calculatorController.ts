@@ -11,7 +11,6 @@ import { ALL_METHODS } from '@vm-migration/shared';
 import { DEFAULT_TUNING_PARAMS } from '../config/defaults.js';
 import { calculateNetworkCopy } from '../services/calculation/networkCopy.js';
 import { calculateXCopy } from '../services/calculation/xcopy.js';
-import { calculateFlashArrayCopy } from '../services/calculation/flasharrayCopy.js';
 import { detectBottlenecks } from '../services/calculation/bottleneckDetector.js';
 import { getCachedVMs } from './discoveryController.js';
 
@@ -30,10 +29,8 @@ function runCalculation(
         result = calculateNetworkCopy(vms, tuning);
         break;
       case 'xcopy':
+      default:
         result = calculateXCopy(vms, tuning);
-        break;
-      case 'flasharray_copy':
-        result = calculateFlashArrayCopy(vms, tuning);
         break;
     }
 

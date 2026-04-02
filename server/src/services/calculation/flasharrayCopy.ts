@@ -46,8 +46,8 @@ export function calculateFlashArrayCopy(vms: VM[], tuning: TuningParams): Calcul
   });
 
   return {
-    method: 'flasharray_copy',
-    methodLabel: METHOD_LABELS.flasharray_copy,
+    method: 'xcopy' as const,
+    methodLabel: METHOD_LABELS['xcopy'],
     totalTimeSeconds: totalTimeSec,
     totalTimeFormatted: formatTime(totalTimeSec),
     perVMResults,

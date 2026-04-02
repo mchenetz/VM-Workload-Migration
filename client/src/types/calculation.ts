@@ -1,4 +1,4 @@
-export type MigrationMethod = 'network_copy' | 'xcopy' | 'flasharray_copy';
+export type MigrationMethod = 'network_copy' | 'xcopy';
 
 export interface TuningParams {
   concurrentTransfers: number;
@@ -63,4 +63,41 @@ export interface PresetProfile {
   name: string;
   description: string;
   tuning: TuningParams;
+}
+
+// ── Migration Schedule ──
+
+export interface ScheduleParams {
+  startDate: string;
+  windowStart: string;
+  windowEnd: string;
+  workDays: number[];
+  maxConcurrent: number;
+  preferredMethod: MigrationMethod;
+  bufferMinutes: number;
+}
+
+export interface ScheduledVM {
+  vmId: string;
+  vmName: string;
+  diskSizeGB: number;
+  estimatedMinutes: number;
+  method: MigrationMethod;
+}
+
+export interface ScheduleWindow {
+  date: string;
+  windowStart: string;
+  windowEnd: string;
+  vms: ScheduledVM[];
+  totalMinutes: number;
+}
+
+export interface MigrationSchedule {
+  generatedAt: string;
+  startDate: string;
+  completionDate: string;
+  totalDays: number;
+  windows: ScheduleWindow[];
+  params: ScheduleParams;
 }

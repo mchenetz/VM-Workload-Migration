@@ -17,6 +17,9 @@ const ConfigPage = lazy(() =>
 const ExportPage = lazy(() =>
   import('./components/export/ExportPage').then((m) => ({ default: m.ExportPage }))
 );
+const SchedulePage = lazy(() =>
+  import('./components/schedule/SchedulePage').then((m) => ({ default: m.SchedulePage }))
+);
 
 export function App() {
   return (
@@ -28,6 +31,7 @@ export function App() {
           <Route path="/discovery" element={<DiscoveryPage />} />
           <Route path="/config" element={<ConfigPage />} />
           <Route path="/export" element={<ExportPage />} />
+          <Route path="/schedule" element={<SchedulePage />} />
         </Routes>
       </Suspense>
     </BrowserRouter>

@@ -28,18 +28,7 @@ export function getRecommendations(
     );
   }
 
-  // 3. FlashArray recommendation
-  const flashArrayResult = results.find((r) => r.method === 'flasharray_copy' && r.compatible);
-  if (flashArrayResult) {
-    const networkResult = results.find((r) => r.method === 'network_copy');
-    if (networkResult && networkResult.totalTimeSeconds > flashArrayResult.totalTimeSeconds * 5) {
-      recommendations.push(
-        'All VMs are eligible for FlashArray volume copy, which is near-instantaneous compared to network-based methods.',
-      );
-    }
-  }
-
-  // 4. Batch size recommendations for large inventories
+  // 3. Batch size recommendations for large inventories
   if (vmCount > 50) {
     const batchSize = Math.ceil(vmCount / Math.ceil(vmCount / 25));
     recommendations.push(
