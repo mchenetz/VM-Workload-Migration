@@ -4,8 +4,10 @@ replicaCount: 1
 image:
   # -- Container image repository
   repository: vm-migration-estimator
-  # -- Image pull policy
-  pullPolicy: IfNotPresent
+  # -- Image pull policy. "Always" ensures helm upgrade reliably picks up
+  # an updated image even if the tag is reused. Set to "IfNotPresent" to
+  # skip the registry check on every pod start (only safe with unique tags).
+  pullPolicy: Always
   # -- Image tag (defaults to Chart appVersion)
   tag: ""
 

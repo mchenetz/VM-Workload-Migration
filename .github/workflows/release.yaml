@@ -81,7 +81,7 @@ jobs:
   # ── Helm Chart to OCI Registry ──
   helm-oci:
     name: Helm Chart (OCI)
-    needs: version
+    needs: [version, docker]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -111,7 +111,7 @@ jobs:
   # ── Helm Chart to GitHub Pages ──
   helm-pages:
     name: Helm Chart (Pages)
-    needs: version
+    needs: [version, docker]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
