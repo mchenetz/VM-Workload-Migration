@@ -365,6 +365,16 @@ export function SchedulePage() {
   // events can read it before React has flushed the setState from onDragStart.
   const dragInfoRef = useRef<DragInfo | null>(null);
   const getDragInfo = () => dragInfoRef.current;
+  // Timer ref for hover-to-expand: when dragging over a collapsed row for
+  // 600 ms the row auto-expands so the user can see the drop landing.
+  const hoverExpandTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function clearHoverExpand() {
+    if (hoverExpandTimer.current) {
+      clearTimeout(hoverExpandTimer.current);
+      hoverExpandTimer.current = null;
+    }
+  }
 
   // Load VM source info on mount
   useEffect(() => {
@@ -475,6 +485,7 @@ export function SchedulePage() {
     setDragInfo(null);
     setDragOverDate(null);
     setRowDragOverDate(null);
+    clearHoverExpand();
   }
 
   function handleDropOnDate(toDate: string) {
@@ -765,17 +776,27 @@ export function SchedulePage() {
                           e.preventDefault();
                           e.dataTransfer.dropEffect = 'move';
                           setRowDragOverDate(win.date);
+                          // Hover-to-expand: open this row after 600 ms so the
+                          // user can see the VM drop into place
+                          if (selectedDate !== win.date && !hoverExpandTimer.current) {
+                            hoverExpandTimer.current = setTimeout(() => {
+                              setSelectedDate(win.date);
+                              hoverExpandTimer.current = null;
+                            }, 600);
+                          }
                         }
                       }}
                       onDragLeave={(e) => {
-                        // Only clear if leaving the row itself, not a child
+                        // Only clear if leaving the row entirely, not a child element
                         if (!e.currentTarget.contains(e.relatedTarget as Node)) {
                           setRowDragOverDate(null);
+                          clearHoverExpand();
                         }
                       }}
                       onDrop={(e) => {
                         e.preventDefault();
                         setRowDragOverDate(null);
+                        clearHoverExpand();
                         const di = getDragInfo();
                         if (di && di.fromDate !== win.date) {
                           handleDropOnDate(win.date);
