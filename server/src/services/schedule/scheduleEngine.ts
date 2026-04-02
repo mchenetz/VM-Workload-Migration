@@ -20,7 +20,12 @@ export function buildSchedule(
     results[0];
 
   const scheduledVMs: ScheduledVM[] = vms.map((vm) => {
-    const vmResult = preferredResult.perVMResults.find((r) => r.vmId === vm.id);
+    // Per-VM override takes priority over preferred method
+    const overrideMethod = params.vmMethodOverrides?.[vm.id];
+    const methodResult = overrideMethod
+      ? (results.find((r) => r.method === overrideMethod && r.compatible) ?? preferredResult)
+      : preferredResult;
+    const vmResult = methodResult.perVMResults.find((r) => r.vmId === vm.id);
     const estimatedMinutes = vmResult
       ? Math.max(1, Math.ceil(vmResult.estimatedSeconds / 60))
       : Math.max(1, Math.ceil((vm.totalDiskSizeGB / 10) * 60)); // fallback: 1 min per 10 GB
@@ -35,7 +40,7 @@ export function buildSchedule(
       powerState: vm.powerState,
       diskSizeGB: vm.totalDiskSizeGB,
       estimatedMinutes,
-      method: preferredResult.method,
+      method: overrideMethod ?? preferredResult.method,
     };
   });
 

@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AppShell } from '../layout/AppShell';
 import { Card } from '../shared/Card';
 import { useAppStore } from '../../store/index';
 import { generateSchedule, exportSchedulePDF } from '../../api/scheduleApi';
+import { getVMSource } from '../../api/discovery';
 import { scoreScheduledVM, TIER_STYLE } from '../../utils/vmDifficulty';
+import type { VMSourceInfo } from '../../api/discovery';
 import type { ScheduleParams, MigrationSchedule, ScheduleWindow } from '../../types/calculation';
+import type { MigrationMethod } from '../../types/calculation';
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DAY_NAMES_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -127,10 +130,16 @@ interface WindowDetailProps {
   window: ScheduleWindow;
   windowIndex: number;
   totalWindows: number;
+  availableMethods: VMSourceInfo['availableMethods'];
+  vmOverrides: Record<string, MigrationMethod>;
   onMoveVM: (fromIdx: number, toIdx: number, vmId: string) => void;
+  onOverrideMethod: (vmId: string, method: MigrationMethod) => void;
 }
 
-function WindowDetail({ window: win, windowIndex, totalWindows, onMoveVM }: WindowDetailProps) {
+function WindowDetail({ window: win, windowIndex, totalWindows, availableMethods, vmOverrides, onMoveVM, onOverrideMethod }: WindowDetailProps) {
+  const compatibleMethods = availableMethods.filter((m) => m.compatible);
+  const showMethodOverride = compatibleMethods.length > 1;
+
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
@@ -146,20 +155,42 @@ function WindowDetail({ window: win, windowIndex, totalWindows, onMoveVM }: Wind
           const mins = vm.estimatedMinutes % 60;
           const timeStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
           const { tier } = scoreScheduledVM(vm);
+          const effectiveMethod = vmOverrides[vm.vmId] ?? vm.method;
+          const isOverridden = !!vmOverrides[vm.vmId];
           return (
             <div
               key={vm.vmId}
               className="flex items-center gap-3 rounded-lg bg-slate-700/50 px-3 py-2"
             >
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-sm text-slate-200 truncate">{vm.vmName}</p>
                   <span className={`px-1.5 py-0.5 rounded text-xs font-medium shrink-0 ${TIER_STYLE[tier]}`}>{tier}</span>
                 </div>
-                <p className="text-xs text-slate-400">
-                  {vm.diskSizeGB.toFixed(1)} GB &bull; {timeStr} &bull;{' '}
-                  {vm.method === 'xcopy' ? 'XCopy' : 'Net Copy'}
-                </p>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <p className="text-xs text-slate-400">
+                    {vm.diskSizeGB.toFixed(1)} GB &bull; {timeStr}
+                  </p>
+                  {showMethodOverride ? (
+                    <select
+                      value={effectiveMethod}
+                      onChange={(e) => onOverrideMethod(vm.vmId, e.target.value as MigrationMethod)}
+                      className={`text-xs rounded px-1.5 py-0.5 border focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                        isOverridden
+                          ? 'bg-amber-900/40 border-amber-600/50 text-amber-300'
+                          : 'bg-slate-600 border-slate-500 text-slate-300'
+                      }`}
+                    >
+                      {compatibleMethods.map((m) => (
+                        <option key={m.method} value={m.method}>{m.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-xs text-slate-500">
+                      {effectiveMethod === 'xcopy' ? 'XCopy' : 'Net Copy'}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex gap-1 shrink-0">
                 {windowIndex > 0 && (
@@ -200,6 +231,26 @@ export function SchedulePage() {
   const [projectName, setProjectName] = useState('VM Migration Schedule');
   const [companyName, setCompanyName] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [vmSource, setVmSource] = useState<VMSourceInfo>({
+    source: 'none',
+    availableMethods: [
+      { method: 'network_copy', label: 'Network Copy', compatible: true },
+      { method: 'xcopy',        label: 'XCopy (VAAI)', compatible: true },
+    ],
+    recommendedMethod: 'network_copy',
+  });
+  const [vmOverrides, setVmOverrides] = useState<Record<string, MigrationMethod>>({});
+
+  // Load VM source info on mount to determine available methods
+  useEffect(() => {
+    getVMSource().then((info) => {
+      setVmSource(info);
+      // Auto-select recommended method when using discovered VMs
+      if (info.source === 'discovered') {
+        setParam('preferredMethod', info.recommendedMethod as MigrationMethod);
+      }
+    }).catch(() => { /* server may not have VMs yet */ });
+  }, []);
 
   const inputClass =
     'bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
@@ -218,11 +269,17 @@ export function SchedulePage() {
     }));
   }
 
+  function handleOverrideMethod(vmId: string, method: MigrationMethod) {
+    setVmOverrides((prev) => ({ ...prev, [vmId]: method }));
+  }
+
   async function handleGenerate() {
     setLoading(true);
     setError(null);
+    setVmOverrides({});
     try {
-      const result = await generateSchedule(params, calculationResults?.results);
+      const paramsWithOverrides = { ...params, vmMethodOverrides: vmOverrides };
+      const result = await generateSchedule(paramsWithOverrides, calculationResults?.results);
       setSchedule(result);
       setSelectedDate(null);
     } catch (err) {
@@ -365,15 +422,35 @@ export function SchedulePage() {
               </div>
 
               <div>
-                <label className={labelClass}>Preferred Method</label>
+                <label className={labelClass}>
+                  Preferred Method
+                  {vmSource.source === 'discovered' && (
+                    <span className="ml-2 text-green-400">● auto-detected</span>
+                  )}
+                  {vmSource.source === 'imported' && (
+                    <span className="ml-2 text-yellow-500">⚠ compatibility unknown (CSV import)</span>
+                  )}
+                </label>
                 <select
                   value={params.preferredMethod}
                   onChange={(e) => setParam('preferredMethod', e.target.value as ScheduleParams['preferredMethod'])}
                   className={inputClass}
                 >
-                  <option value="network_copy">Network Copy</option>
-                  <option value="xcopy">XCopy (VAAI)</option>
+                  {(vmSource.availableMethods.length > 0
+                    ? vmSource.availableMethods.filter((m) => vmSource.source !== 'discovered' || m.compatible)
+                    : [
+                        { method: 'network_copy', label: 'Network Copy', compatible: true },
+                        { method: 'xcopy',        label: 'XCopy (VAAI)', compatible: true },
+                      ]
+                  ).map((m) => (
+                    <option key={m.method} value={m.method}>{m.label}</option>
+                  ))}
                 </select>
+                {vmSource.source === 'discovered' && vmSource.availableMethods.some((m) => !m.compatible) && (
+                  <p className="text-xs text-slate-500 mt-1">
+                    {vmSource.availableMethods.filter((m) => !m.compatible).map((m) => m.reason).join(' · ')}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -469,7 +546,10 @@ export function SchedulePage() {
                     window={selectedWindow}
                     windowIndex={selectedWindowIndex}
                     totalWindows={schedule.windows.length}
+                    availableMethods={vmSource.availableMethods}
+                    vmOverrides={vmOverrides}
                     onMoveVM={handleMoveVM}
+                    onOverrideMethod={handleOverrideMethod}
                   />
                 </Card>
               )}
@@ -514,7 +594,10 @@ export function SchedulePage() {
                             window={win}
                             windowIndex={idx}
                             totalWindows={schedule.windows.length}
+                            availableMethods={vmSource.availableMethods}
+                            vmOverrides={vmOverrides}
                             onMoveVM={handleMoveVM}
+                            onOverrideMethod={handleOverrideMethod}
                           />
                         </div>
                       )}

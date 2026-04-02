@@ -88,6 +88,7 @@ export function VMwarePanel() {
   );
 
   const isConnected = vmwarePlatform?.status === 'connected';
+  const isImported = discoveredVMs.length > 0 && discoveredVMs[0]?.datastoreName === 'imported';
 
   const handleCSVImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -250,7 +251,7 @@ export function VMwarePanel() {
                 <th className="px-4 py-3 font-medium text-right">Total Disk</th>
                 <th className="px-4 py-3 font-medium">Datastore</th>
                 <th className="px-4 py-3 font-medium">Difficulty</th>
-                <th className="px-4 py-3 font-medium">Compatibility</th>
+                {!isImported && <th className="px-4 py-3 font-medium">Compatibility</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700">
@@ -286,9 +287,11 @@ export function VMwarePanel() {
                   <td className="px-4 py-3">
                     <DifficultyBadge vm={vm} />
                   </td>
-                  <td className="px-4 py-3">
-                    <CompatibilityBadges vm={vm} />
-                  </td>
+                  {!isImported && (
+                    <td className="px-4 py-3">
+                      <CompatibilityBadges vm={vm} />
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

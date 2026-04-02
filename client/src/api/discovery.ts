@@ -24,3 +24,14 @@ export async function importVMsToServer(vms: unknown[]): Promise<{ imported: num
   const { data } = await api.post('/discovery/vmware/import', { vms });
   return data.data;
 }
+
+export interface VMSourceInfo {
+  source: 'imported' | 'discovered' | 'none';
+  availableMethods: Array<{ method: string; label: string; compatible: boolean; reason?: string }>;
+  recommendedMethod: string;
+}
+
+export async function getVMSource(): Promise<VMSourceInfo> {
+  const { data } = await api.get('/discovery/vmware/source');
+  return data.data;
+}

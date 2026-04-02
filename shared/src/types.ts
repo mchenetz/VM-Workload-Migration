@@ -240,6 +240,8 @@ export interface ScheduleParams {
   preferredMethod: MigrationMethod;
   /** Buffer between VM migrations in minutes */
   bufferMinutes: number;
+  /** Per-VM method overrides: vmId → method */
+  vmMethodOverrides?: Record<string, MigrationMethod>;
 }
 
 // ── PDF Export ──

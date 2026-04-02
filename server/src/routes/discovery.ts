@@ -91,3 +91,15 @@ discoveryRoutes.get(
     }
   },
 );
+
+discoveryRoutes.get(
+  '/vmware/source',
+  (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const data = discoveryController.getVMSource();
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  },
+);

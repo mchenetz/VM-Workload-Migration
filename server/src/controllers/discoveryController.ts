@@ -154,3 +154,51 @@ export function importVMs(vms: VM[]): void {
   // Reset datastores to empty when using imported VMs
   cachedDatastores = [];
 }
+
+/**
+ * Returns the VM source type and which migration methods are available.
+ * - 'imported': VMs came from CSV; method compatibility is unknown
+ * - 'discovered': VMs came from vCenter; use datastore info to determine methods
+ */
+export function getVMSource(): {
+  source: 'imported' | 'discovered' | 'none';
+  availableMethods: Array<{ method: string; label: string; compatible: boolean; reason?: string }>;
+  recommendedMethod: string;
+} {
+  if (cachedVMs.length === 0) {
+    return { source: 'none', availableMethods: [], recommendedMethod: 'network_copy' };
+  }
+
+  const isImported = cachedDatastores.length === 0;
+
+  if (isImported) {
+    return {
+      source: 'imported',
+      availableMethods: [
+        { method: 'network_copy', label: 'Network Copy', compatible: true },
+        { method: 'xcopy',        label: 'XCopy (VAAI)', compatible: true },
+      ],
+      recommendedMethod: 'network_copy',
+    };
+  }
+
+  // Discovered: derive method availability from datastores
+  const anyVAAI     = cachedVMs.some((vm) => cachedDatastores.find((ds) => ds.name === vm.datastoreName)?.isVAAICapable);
+  const anyFlash    = cachedVMs.some((vm) => cachedDatastores.find((ds) => ds.name === vm.datastoreName)?.isFlashArrayBacked);
+
+  const methods = [
+    { method: 'network_copy', label: 'Network Copy', compatible: true },
+    {
+      method: 'xcopy', label: 'XCopy (VAAI)', compatible: anyVAAI,
+      reason: anyVAAI ? undefined : 'No VAAI-capable (VMFS) datastores found',
+    },
+    {
+      method: 'xcopy', label: 'FlashArray XCopy', compatible: anyFlash,
+      reason: anyFlash ? undefined : 'No FlashArray-backed datastores found',
+    },
+  ];
+
+  const recommended = anyFlash ? 'xcopy' : anyVAAI ? 'xcopy' : 'network_copy';
+
+  return { source: 'discovered', availableMethods: methods, recommendedMethod: recommended };
+}
