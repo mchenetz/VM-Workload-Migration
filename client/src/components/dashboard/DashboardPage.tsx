@@ -10,10 +10,9 @@ const DEMO_DATA: CalculationResponse = {
   results: [
     { method: 'network_copy', methodLabel: 'Network Copy (VDDK)', totalTimeSeconds: 14400, totalTimeFormatted: '4h 0m', perVMResults: [], formulaSteps: [], bottlenecks: [], recommendations: [], compatible: true },
     { method: 'xcopy', methodLabel: 'XCopy (VAAI)', totalTimeSeconds: 2880, totalTimeFormatted: '48m 0s', perVMResults: [], formulaSteps: [], bottlenecks: [], recommendations: [], compatible: true },
-    { method: 'flasharray_copy', methodLabel: 'FlashArray Volume Copy', totalTimeSeconds: 15, totalTimeFormatted: '15s', perVMResults: [], formulaSteps: [], bottlenecks: [], recommendations: [], compatible: true },
   ],
-  recommendedMethod: 'flasharray_copy',
-  summary: { totalVMs: 24, totalDiskGB: 4800, fastestMethod: 'flasharray_copy', fastestTimeFormatted: '15s' },
+  recommendedMethod: 'xcopy',
+  summary: { totalVMs: 24, totalDiskGB: 4800, fastestMethod: 'xcopy', fastestTimeFormatted: '48m 0s' },
 };
 
 export function DashboardPage() {
