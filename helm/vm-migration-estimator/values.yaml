@@ -3,7 +3,7 @@ replicaCount: 1
 
 image:
   # -- Container image repository
-  repository: vm-migration-estimator
+  repository: ghcr.io/mchenetz/vm-migration-estimator
   # -- Image pull policy. "Always" ensures helm upgrade reliably picks up
   # an updated image even if the tag is reused. Set to "IfNotPresent" to
   # skip the registry check on every pod start (only safe with unique tags).
