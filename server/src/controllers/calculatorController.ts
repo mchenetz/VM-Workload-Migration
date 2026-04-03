@@ -11,7 +11,6 @@ import { ALL_METHODS } from '@vm-migration/shared';
 import { DEFAULT_TUNING_PARAMS } from '../config/defaults.js';
 import { calculateNetworkCopy } from '../services/calculation/networkCopy.js';
 import { calculateXCopy } from '../services/calculation/xcopy.js';
-import { calculatePortworxMigration } from '../services/calculation/portworxMigration.js';
 import { detectBottlenecks } from '../services/calculation/bottleneckDetector.js';
 import { getCachedVMs } from './discoveryController.js';
 
@@ -31,9 +30,6 @@ function runCalculation(
         break;
       case 'xcopy':
         result = calculateXCopy(vms, tuning);
-        break;
-      case 'portworx_migration':
-        result = calculatePortworxMigration(vms, tuning);
         break;
       default:
         result = calculateNetworkCopy(vms, tuning);

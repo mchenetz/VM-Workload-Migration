@@ -22,7 +22,7 @@ const tuningParamsSchema = z.object({
   daysSinceCutover: z.number().int().nonnegative().optional(),
 });
 
-const migrationMethodSchema = z.enum(['network_copy', 'xcopy', 'portworx_migration']);
+const migrationMethodSchema = z.enum(['network_copy', 'xcopy']);
 
 export const manualCalcSchema = z.object({
   vmCount: z.number().int().positive(),

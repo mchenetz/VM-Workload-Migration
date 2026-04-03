@@ -4,7 +4,6 @@ import type {
   FlashArrayVolume,
   Datastore,
   CompatibilityResult,
-  PortworxInfo,
 } from '@vm-migration/shared';
 import { getClient } from './platformController.js';
 import { VmwareClient } from '../services/vmware/VmwareClient.js';
@@ -180,7 +179,6 @@ export function getCompatibility(): CompatibilityResult[] {
   }
 
   const storageClasses = cachedClusterInfo?.storageClasses ?? [];
-  const portworxInfo = cachedClusterInfo?.portworxInfo;
 
   return cachedVMs.map((vm) => {
     const networkCopy = true;
@@ -197,21 +195,6 @@ export function getCompatibility(): CompatibilityResult[] {
         : 'No storage class with a Pure Storage provisioner found')
       : undefined;
 
-    const hasPortworxCSI = storageClasses.some(
-      (sc) => sc.provisioner.toLowerCase().includes('portworx') || sc.provisioner === 'pxd.portworx.com',
-    );
-    const portworxMigration =
-      (portworxInfo?.installed ?? false) &&
-      (datastoreInfo?.isPortworxBacked ?? false) &&
-      hasPortworxCSI;
-    const portworxReason = !portworxMigration
-      ? (!portworxInfo?.installed
-        ? 'Portworx not detected in the OpenShift cluster'
-        : !datastoreInfo?.isPortworxBacked
-          ? 'Datastore is not backed by a Portworx volume'
-          : 'No Portworx CSI storage class found in OpenShift')
-      : undefined;
-
     return {
       vmId: vm.id,
       vmName: vm.name,
@@ -220,8 +203,6 @@ export function getCompatibility(): CompatibilityResult[] {
       xcopyReason,
       flasharrayCopy,
       flasharrayReason,
-      portworxMigration,
-      portworxReason,
     };
   });
 }
@@ -258,16 +239,13 @@ export function getVMSource(): {
   }
 
   const storageClasses = cachedClusterInfo?.storageClasses ?? [];
-  const portworxInfo: PortworxInfo | undefined = cachedClusterInfo?.portworxInfo;
 
-  const anyVAAI     = cachedVMs.some((vm) => cachedDatastores.find((ds) => ds.name === vm.datastoreName)?.isVAAICapable);
-  const anyFlash    = cachedVMs.some((vm) => cachedDatastores.find((ds) => ds.name === vm.datastoreName)?.isFlashArrayBacked);
-  const anyPortworx = cachedVMs.some((vm) => cachedDatastores.find((ds) => ds.name === vm.datastoreName)?.isPortworxBacked);
-  const hasPure     = storageClasses.some((sc) => sc.provisioner.toLowerCase().includes('pure'));
-  const hasPxCSI    = storageClasses.some((sc) => sc.provisioner.toLowerCase().includes('portworx') || sc.provisioner === 'pxd.portworx.com');
+  const anyVAAI  = cachedVMs.some((vm) => cachedDatastores.find((ds) => ds.name === vm.datastoreName)?.isVAAICapable);
+  const anyFlash = cachedVMs.some((vm) => cachedDatastores.find((ds) => ds.name === vm.datastoreName)?.isFlashArrayBacked);
+  const hasPure  = storageClasses.some((sc) => sc.provisioner.toLowerCase().includes('pure'));
 
   const methods = [
-    { method: 'network_copy', label: 'Network Copy', compatible: true },
+    { method: 'network_copy', label: 'Network Copy (VDDK)', compatible: true },
     {
       method: 'xcopy', label: 'XCopy (VAAI)', compatible: anyVAAI,
       reason: anyVAAI ? undefined : 'No VAAI-capable (VMFS) datastores found',
@@ -276,26 +254,9 @@ export function getVMSource(): {
       method: 'flasharray_copy', label: 'FlashArray Copy', compatible: anyFlash && hasPure,
       reason: anyFlash && hasPure ? undefined : 'No FlashArray-backed datastores or Pure CSI not found',
     },
-    {
-      method: 'portworx_migration', label: 'Portworx Migration',
-      compatible: !!(anyPortworx && portworxInfo?.installed && hasPxCSI),
-      reason: anyPortworx && portworxInfo?.installed && hasPxCSI
-        ? undefined
-        : !portworxInfo?.installed
-          ? 'Portworx not detected in OpenShift'
-          : !anyPortworx
-            ? 'No Portworx-backed datastores found'
-            : 'No Portworx CSI storage class found in OpenShift',
-    },
   ];
 
-  const recommended = anyPortworx && portworxInfo?.installed && hasPxCSI
-    ? 'portworx_migration'
-    : anyFlash && hasPure
-      ? 'xcopy'
-      : anyVAAI
-        ? 'xcopy'
-        : 'network_copy';
+  const recommended = anyFlash && hasPure ? 'xcopy' : anyVAAI ? 'xcopy' : 'network_copy';
 
   return { source: 'discovered', availableMethods: methods, recommendedMethod: recommended };
 }

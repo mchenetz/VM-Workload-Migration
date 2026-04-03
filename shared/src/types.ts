@@ -90,7 +90,7 @@ export type PlatformCredentials =
 
 // ── Calculation ──
 
-export type MigrationMethod = 'network_copy' | 'xcopy' | 'portworx_migration';
+export type MigrationMethod = 'network_copy' | 'xcopy';
 
 export interface TuningParams {
   concurrentTransfers: number;
@@ -190,8 +190,6 @@ export interface CompatibilityResult {
   xcopyReason?: string;
   flasharrayCopy: boolean;
   flasharrayReason?: string;
-  portworxMigration: boolean;
-  portworxReason?: string;
 }
 
 // ── Migration Schedule ──

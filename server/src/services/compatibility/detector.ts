@@ -3,29 +3,23 @@ import type {
   Datastore,
   StorageClass,
   CompatibilityResult,
-  PortworxInfo,
 } from '@vm-migration/shared';
 
 export function detectCompatibility(
   vms: VM[],
   datastores: Datastore[],
   storageClasses: StorageClass[],
-  portworxInfo?: PortworxInfo,
 ): CompatibilityResult[] {
   const datastoreMap = new Map(datastores.map((ds) => [ds.name, ds]));
 
   const hasPureProvisioner = storageClasses.some((sc) =>
     sc.provisioner.toLowerCase().includes('pure'),
   );
-  const hasPortworxProvisioner = storageClasses.some((sc) =>
-    sc.provisioner.toLowerCase().includes('portworx') ||
-    sc.provisioner === 'pxd.portworx.com',
-  );
 
   return vms.map((vm) => {
     const datastore = datastoreMap.get(vm.datastoreName);
 
-    // Network copy is always available
+    // Network copy (VDDK) is always available
     const networkCopy = true;
 
     // XCOPY requires VAAI-capable datastore
@@ -40,7 +34,7 @@ export function detectCompatibility(
       xcopy = true;
     }
 
-    // FlashArray copy requires FlashArray-backed datastore AND a Pure storage class
+    // FlashArray copy requires FlashArray-backed datastore AND a Pure storage class in OpenShift
     let flasharrayCopy = false;
     let flasharrayReason: string | undefined;
 
@@ -54,22 +48,6 @@ export function detectCompatibility(
       flasharrayCopy = true;
     }
 
-    // Portworx migration requires Portworx-backed datastore AND Portworx CSI in OpenShift
-    let portworxMigration = false;
-    let portworxReason: string | undefined;
-
-    if (!portworxInfo?.installed) {
-      portworxReason = 'Portworx not detected in the OpenShift cluster';
-    } else if (!datastore) {
-      portworxReason = `Datastore "${vm.datastoreName}" not found; cannot determine Portworx backing`;
-    } else if (!datastore.isPortworxBacked) {
-      portworxReason = `Datastore "${datastore.name}" is not backed by a Portworx volume`;
-    } else if (!hasPortworxProvisioner) {
-      portworxReason = 'No Portworx CSI storage class (pxd.portworx.com) found in the OpenShift cluster';
-    } else {
-      portworxMigration = true;
-    }
-
     return {
       vmId: vm.id,
       vmName: vm.name,
@@ -78,8 +56,6 @@ export function detectCompatibility(
       ...(xcopyReason ? { xcopyReason } : {}),
       flasharrayCopy,
       ...(flasharrayReason ? { flasharrayReason } : {}),
-      portworxMigration,
-      ...(portworxReason ? { portworxReason } : {}),
     };
   });
 }

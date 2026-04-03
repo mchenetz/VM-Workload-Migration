@@ -3,19 +3,16 @@ import type { MigrationMethod } from './types.js';
 export const METHOD_LABELS: Record<MigrationMethod, string> = {
   network_copy: 'Network Copy (VDDK)',
   xcopy: 'XCopy (VAAI)',
-  portworx_migration: 'Portworx Migration',
 };
 
 export const METHOD_COLORS: Record<MigrationMethod, string> = {
-  network_copy: '#3b82f6',        // blue-500
-  xcopy: '#a855f7',               // purple-500
-  portworx_migration: '#8b5cf6',  // violet-500
+  network_copy: '#3b82f6',  // blue-500
+  xcopy: '#a855f7',         // purple-500
 };
 
 export const METHOD_DESCRIPTIONS: Record<MigrationMethod, string> = {
-  network_copy: 'Standard Forklift method. Transfers VM disks over the network via VMware VDDK.',
-  xcopy: 'VMware VAAI storage primitive. Offloads copy to the storage array for faster transfers.',
-  portworx_migration: 'Delta-based migration using Portworx continuous replication. Only the final delta transfers at cutover.',
+  network_copy: 'Standard Forklift method. Transfers VM disk data over the network via VMware VDDK.',
+  xcopy: 'VMware VAAI storage primitive. Offloads the copy to the FlashArray for near-instant transfers.',
 };
 
 export interface MethodInfo {
@@ -60,23 +57,6 @@ export const METHOD_INFO: Record<MigrationMethod, MethodInfo> = {
     ],
     bestFor: 'Large VMs on VMFS datastores where array-internal copy eliminates network bottlenecks',
   },
-  portworx_migration: {
-    headline: 'Near-zero downtime migration using Portworx continuous volume replication',
-    dataPath: 'Pre-replicated — only the change-rate delta is transferred at cutover',
-    howItWorks: [
-      'Portworx replicates the source volume to the target OpenShift namespace asynchronously before cutover',
-      'The VM continues running on vCenter while replication keeps the target in sync',
-      'At cutover the VM is powered off and only the delta since the last snapshot is applied — seconds to minutes of data, not hours',
-      'The target PVC is promoted from replica to primary; no bulk data movement occurs',
-    ],
-    requirements: [
-      'Portworx Enterprise deployed in the OpenShift cluster',
-      'VMware datastores exported from Portworx via NFS or iSCSI',
-      'Portworx CSI driver (pxd.portworx.com) storage class in OpenShift',
-      'Portworx replication pre-configured between source volume and target namespace',
-    ],
-    bestFor: 'Large, low-change-rate VMs where minimal cutover downtime is critical',
-  },
 };
 
 // Unit conversions
@@ -97,4 +77,4 @@ export const DEFAULT_TUNING = {
   daysSinceCutover: 1,
 };
 
-export const ALL_METHODS: MigrationMethod[] = ['network_copy', 'xcopy', 'portworx_migration'];
+export const ALL_METHODS: MigrationMethod[] = ['network_copy', 'xcopy'];
