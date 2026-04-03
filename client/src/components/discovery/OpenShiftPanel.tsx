@@ -93,7 +93,11 @@ function PortworxSection({ info }: { info: PortworxInfo }) {
           <div>
             <p className="text-xs text-slate-500 uppercase mb-1">Storage</p>
             <p className="text-sm font-semibold text-slate-200">
-              {formatNumber(info.usedCapacityGB)} / {formatNumber(info.totalCapacityGB)} GB
+              {info.totalCapacityGB > 0
+                ? `${formatNumber(info.usedCapacityGB)} / ${formatNumber(info.totalCapacityGB)} GB`
+                : info.usedCapacityGB > 0
+                  ? `${formatNumber(info.usedCapacityGB)} GB provisioned`
+                  : '—'}
             </p>
           </div>
         </div>

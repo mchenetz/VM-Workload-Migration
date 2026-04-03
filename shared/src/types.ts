@@ -32,6 +32,7 @@ export interface Datastore {
   isFlashArrayBacked: boolean;
   isPortworxBacked: boolean;
   portworxVolumeId?: string;
+  flashArrayVolumeId?: string;
   url?: string;
 }
 
@@ -282,6 +283,8 @@ export interface PortworxVolume {
   backendType: 'flasharray' | 'cloud' | 'generic';
   ioProfile: string;
   state: 'running' | 'stopped' | 'degraded';
+  flashArrayVolumeId?: string;
+  flashArrayVolumeName?: string;
 }
 
 export interface PortworxNode {
@@ -314,6 +317,7 @@ export interface FlashArrayVolume {
   dataReduction: number;
   thinProvisioning: number;
   source?: string;
+  serial?: string;  // SCSI serial (NAA-6), used for device correlation
 }
 
 export interface FlashArrayPerformance {

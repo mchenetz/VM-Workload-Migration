@@ -12,6 +12,12 @@
       "runtimeExecutable": "/bin/bash",
       "runtimeArgs": ["-c", "export PATH=/opt/homebrew/bin:$PATH && npm run dev -w client"],
       "port": 5173
+    },
+    {
+      "name": "client-remote",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": ["-c", "export PATH=/opt/homebrew/bin:$PATH && VITE_API_TARGET=http://192.168.50.80:3001 npm run dev -w client"],
+      "port": 5173
     }
   ]
 }

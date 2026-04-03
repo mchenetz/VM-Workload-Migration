@@ -111,6 +111,7 @@ export interface PureVolume {
   id: string;
   name: string;
   provisioned: number;
+  serial?: string;
   space?: {
     data_reduction?: number;
     thin_provisioning?: number;

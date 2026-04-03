@@ -1,5 +1,7 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import https from 'node:https';
+import crypto from 'node:crypto';
+import { URL } from 'node:url';
 
 export class OpenshiftClient {
   private endpoint: string;
@@ -141,6 +143,160 @@ export class OpenshiftClient {
       return { items: [] };
     }
   }
+
+  async secretExists(namespace: string, name: string): Promise<boolean> {
+    try {
+      await this.api.get(`/api/v1/namespaces/${namespace}/secrets/${name}`);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Find the name of a running Portworx pod in the given namespace. */
+  async findPortworxPod(namespace: string): Promise<string | null> {
+    try {
+      // Try label selectors first
+      const selectors = [
+        'name=portworx',
+        'app=portworx',
+        'app.kubernetes.io/name=portworx',
+        'name=portworx-api',
+        'app=portworx-api',
+      ];
+      for (const selector of selectors) {
+        const res = await this.api.get(
+          `/api/v1/namespaces/${namespace}/pods?labelSelector=${encodeURIComponent(selector)}&fieldSelector=status.phase%3DRunning`,
+        );
+        const items: Array<{ metadata: { name: string } }> = res.data?.items ?? [];
+        if (items.length > 0) return items[0].metadata.name;
+      }
+      // Fallback: list all pods in namespace and find one with portworx in the name
+      const allRes = await this.api.get(
+        `/api/v1/namespaces/${namespace}/pods?fieldSelector=status.phase%3DRunning`,
+      );
+      const allItems: Array<{ metadata: { name: string }; spec?: { containers?: Array<{ name: string }> } }> =
+        allRes.data?.items ?? [];
+      const pxPod = allItems.find((p) => {
+        const podName = p.metadata.name.toLowerCase();
+        return podName.includes('portworx') && !podName.includes('operator') && !podName.includes('prometheus');
+      });
+      return pxPod?.metadata.name ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Execute a command in a pod via the Kubernetes WebSocket exec API.
+   * Returns { stdout, stderr } as strings.
+   */
+  execInPod(
+    namespace: string,
+    pod: string,
+    command: string[],
+    container?: string,
+  ): Promise<{ stdout: string; stderr: string }> {
+    return new Promise((resolve, reject) => {
+      const base = new URL(this.endpoint);
+      const params = new URLSearchParams();
+      for (const c of command) params.append('command', c);
+      params.append('stdout', 'true');
+      params.append('stderr', 'true');
+      params.append('stdin', 'false');
+      params.append('tty', 'false');
+      if (container) params.append('container', container);
+
+      const path = `/api/v1/namespaces/${namespace}/pods/${pod}/exec?${params.toString()}`;
+      const wsKey = crypto.randomBytes(16).toString('base64');
+
+      const req = https.request({
+        hostname: base.hostname,
+        port: Number(base.port) || 443,
+        path,
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          Upgrade: 'websocket',
+          Connection: 'Upgrade',
+          'Sec-WebSocket-Key': wsKey,
+          'Sec-WebSocket-Version': '13',
+          'Sec-WebSocket-Protocol': 'channel.k8s.io',
+        },
+        rejectUnauthorized: false,
+        timeout: 30000,
+      });
+
+      req.on('upgrade', (_res, socket) => {
+        let stdout = '';
+        let stderr = '';
+        let buf = Buffer.alloc(0);
+
+        const timeout = setTimeout(() => {
+          socket.destroy();
+          resolve({ stdout, stderr });
+        }, 25000);
+
+        socket.on('data', (chunk: Buffer) => {
+          buf = Buffer.concat([buf, chunk]);
+          // Parse WebSocket frames
+          while (buf.length >= 2) {
+            const opcode = buf[0] & 0x0f;
+            const masked = (buf[1] & 0x80) !== 0;
+            let payloadLen = buf[1] & 0x7f;
+            let offset = 2;
+
+            if (payloadLen === 126) {
+              if (buf.length < 4) break;
+              payloadLen = buf.readUInt16BE(2);
+              offset = 4;
+            } else if (payloadLen === 127) {
+              if (buf.length < 10) break;
+              // Safe for realistic exec output sizes
+              payloadLen = Number(buf.readBigUInt64BE(2));
+              offset = 10;
+            }
+            if (masked) offset += 4;
+            if (buf.length < offset + payloadLen) break;
+
+            const payload = buf.subarray(offset, offset + payloadLen);
+            buf = buf.subarray(offset + payloadLen);
+
+            if (opcode === 0x8) { // connection close
+              clearTimeout(timeout);
+              socket.end();
+              resolve({ stdout, stderr });
+              return;
+            }
+            if ((opcode === 0x1 || opcode === 0x2) && payload.length > 0) {
+              const channel = payload[0];
+              const data = payload.subarray(1).toString('utf8');
+              if (channel === 1) stdout += data;
+              else if (channel === 2) stderr += data;
+              else if (channel === 3) {
+                // K8s status/error JSON
+                try {
+                  const s = JSON.parse(data) as { status?: string; message?: string };
+                  if (s.status === 'Failure') {
+                    clearTimeout(timeout);
+                    reject(new Error(s.message ?? 'exec failed'));
+                    return;
+                  }
+                } catch { /* non-JSON status — ignore */ }
+              }
+            }
+          }
+        });
+
+        socket.on('end', () => { clearTimeout(timeout); resolve({ stdout, stderr }); });
+        socket.on('error', (e) => { clearTimeout(timeout); reject(e); });
+      });
+
+      req.on('error', reject);
+      req.on('timeout', () => { req.destroy(); reject(new Error('exec request timed out')); });
+      req.end();
+    });
+  }
 }
 
 // Kubernetes API response types
@@ -178,6 +334,7 @@ export interface K8sStorageClass {
   };
   provisioner: string;
   volumeBindingMode?: string;
+  parameters?: Record<string, string>;
 }
 
 export interface MTVPlanList {
@@ -205,6 +362,7 @@ export interface PxStorageCluster {
     storage?: { devices?: string[] };
     cloudStorage?: { deviceSpecs?: string[] };
     env?: Array<{ name: string; value?: string }>;
+    volumes?: Array<{ name?: string; secret?: { secretName?: string } }>;
   };
   status?: {
     phase?: string;

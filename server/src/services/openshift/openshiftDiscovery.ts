@@ -1,5 +1,5 @@
 import type { ClusterInfo, StorageClass, PortworxInfo, PortworxVolume, PortworxNode } from '@vm-migration/shared';
-import type { OpenshiftClient, PxStorageCluster } from './OpenshiftClient.js';
+import type { OpenshiftClient, PxStorageCluster, K8sStorageClass } from './OpenshiftClient.js';
 
 export async function discoverOpenShift(
   client: OpenshiftClient,
@@ -28,7 +28,7 @@ export async function discoverOpenShift(
   }));
 
   const mtvInstalled = await checkMTVInstalled(client);
-  const portworxInfo = await discoverPortworx(client);
+  const portworxInfo = await discoverPortworx(client, storageClassList.items);
 
   return {
     name: nodeList.items[0]?.metadata.labels?.['kubernetes.io/cluster-name'] ?? 'openshift-cluster',
@@ -41,7 +41,7 @@ export async function discoverOpenShift(
   };
 }
 
-async function discoverPortworx(client: OpenshiftClient): Promise<PortworxInfo | null> {
+async function discoverPortworx(client: OpenshiftClient, storageClasses: K8sStorageClass[] = []): Promise<PortworxInfo | null> {
   try {
     const [clusterList, nodeList, pvList] = await Promise.all([
       client.getPortworxStorageCluster(),
@@ -54,19 +54,24 @@ async function discoverPortworx(client: OpenshiftClient): Promise<PortworxInfo |
     }
 
     const cluster = clusterList.items[0];
-    const backendType = detectBackendType(cluster);
+    const pxNamespace = cluster.metadata.namespace;
+    const hasPureSecret = await client.secretExists(pxNamespace, 'px-pure-secret');
+    const backendType = detectBackendType(cluster, storageClasses, hasPureSecret);
     const version = cluster.status?.version ?? 'unknown';
     const clusterName = cluster.metadata.name;
 
     // Map StorageNodes to PortworxNode
     const nodes: PortworxNode[] = nodeList.items.map((n) => {
-      const totalBytes = parseStorageBytes(n.status?.storage?.totalCapacityRaw ?? '0');
-      const usedBytes = parseStorageBytes(n.status?.storage?.usedRaw ?? '0');
+      const pools = n.status?.storage?.pools ?? [];
+      const poolTotalBytes = pools.reduce((s, p) => s + parseStorageBytes(p.totalSize ?? '0'), 0);
+      const poolUsedBytes = pools.reduce((s, p) => s + parseStorageBytes(p.usedSize ?? '0'), 0);
+      const totalBytes = parseStorageBytes(n.status?.storage?.totalCapacityRaw ?? '0') || poolTotalBytes;
+      const usedBytes = parseStorageBytes(n.status?.storage?.usedRaw ?? '0') || poolUsedBytes;
       return {
         id: n.status?.nodeUid ?? n.metadata.name,
         hostname: n.metadata.name,
         ip: n.status?.network?.dataIp ?? n.status?.network?.mgmtIp ?? '',
-        poolCount: n.status?.storage?.pools?.length ?? 0,
+        poolCount: pools.length,
         totalCapacityGB: Math.round(totalBytes / (1024 ** 3)),
         usedCapacityGB: Math.round(usedBytes / (1024 ** 3)),
       };
@@ -88,8 +93,17 @@ async function discoverPortworx(client: OpenshiftClient): Promise<PortworxInfo |
       };
     });
 
-    const totalCapacityGB = nodes.reduce((s, n) => s + n.totalCapacityGB, 0);
-    const usedCapacityGB = nodes.reduce((s, n) => s + n.usedCapacityGB, 0);
+    let totalCapacityGB = nodes.reduce((s, n) => s + n.totalCapacityGB, 0);
+    let usedCapacityGB = nodes.reduce((s, n) => s + n.usedCapacityGB, 0);
+    // Fall back to cluster-level capacity if nodes reported nothing
+    if (totalCapacityGB === 0 && cluster.status?.storage?.totalCapacityRaw) {
+      totalCapacityGB = Math.round(parseStorageBytes(cluster.status.storage.totalCapacityRaw) / (1024 ** 3));
+      usedCapacityGB = Math.round(parseStorageBytes(cluster.status.storage.usedRaw ?? '0') / (1024 ** 3));
+    }
+    // Final fallback: sum PV sizes as proxy for used storage
+    if (totalCapacityGB === 0 && volumes.length > 0) {
+      usedCapacityGB = Math.round(volumes.reduce((s, v) => s + v.sizeGB, 0));
+    }
 
     return {
       installed: true,
@@ -107,22 +121,50 @@ async function discoverPortworx(client: OpenshiftClient): Promise<PortworxInfo |
   }
 }
 
-function detectBackendType(cluster: PxStorageCluster): 'flasharray' | 'cloud' | 'generic' {
+function detectBackendType(cluster: PxStorageCluster, storageClasses: K8sStorageClass[] = [], hasPureSecret = false): 'flasharray' | 'cloud' | 'generic' {
+  // 0. px-pure-secret exists in the Portworx namespace — definitive FlashArray signal
+  if (hasPureSecret) {
+    return 'flasharray';
+  }
+  // 1. Explicit backend providers in cluster status
   const providers = cluster.status?.storage?.backendProviders ?? [];
   if (providers.some((p) => p.providerName?.toLowerCase().includes('pure') || p.providerName?.toLowerCase().includes('flasharray'))) {
     return 'flasharray';
   }
+
+  // 2. Pure-related env vars (PURE_FLASHARRAY_SAN_TYPE, PURE_BACKEND, etc.)
   const envVars = cluster.spec?.env ?? [];
-  if (envVars.some((e) => e.name === 'PURE_FLASHARRAY_SAN_TYPE')) {
+  if (envVars.some((e) => e.name.startsWith('PURE_') || e.name.includes('FLASHARRAY'))) {
     return 'flasharray';
   }
+
+  // 3. px-pure-secret mounted as a volume — definitive signal for Pure backend
+  const volumes = cluster.spec?.volumes ?? [];
+  if (volumes.some((v) => v.secret?.secretName?.toLowerCase().includes('pure'))) {
+    return 'flasharray';
+  }
+
+  // 4. Device specs mentioning pure or fa-
   const devices = [...(cluster.spec?.storage?.devices ?? []), ...(cluster.spec?.cloudStorage?.deviceSpecs ?? [])];
   if (devices.some((d) => d.toLowerCase().includes('pure') || d.toLowerCase().includes('fa-'))) {
     return 'flasharray';
   }
+
+  // 5. Storage class parameters — pure_block / pure_file backend param, or pure provisioner
+  const pxStorageClasses = storageClasses.filter((sc) => sc.provisioner === 'pxd.portworx.com');
+  const hasPureBackend = pxStorageClasses.some((sc) => {
+    const params = sc.parameters ?? {};
+    return Object.values(params).some((v) => v.toLowerCase().includes('pure'));
+  });
+  if (hasPureBackend) {
+    return 'flasharray';
+  }
+
+  // 6. Cloud storage specs present
   if (cluster.spec?.cloudStorage?.deviceSpecs && cluster.spec.cloudStorage.deviceSpecs.length > 0) {
     return 'cloud';
   }
+
   return 'generic';
 }
 

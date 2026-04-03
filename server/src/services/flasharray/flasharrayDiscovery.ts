@@ -34,6 +34,7 @@ export async function discoverFlashArray(
     dataReduction: v.space?.data_reduction ?? 1,
     thinProvisioning: v.space?.thin_provisioning ?? 0,
     source: v.source?.name,
+    serial: v.serial,
   }));
 
   const perfItem = performanceResponse.items[0];

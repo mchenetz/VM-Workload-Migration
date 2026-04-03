@@ -13,12 +13,54 @@ import { FlashArrayClient } from '../services/flasharray/FlashArrayClient.js';
 import { discoverOpenShift as runOSDiscovery } from '../services/openshift/openshiftDiscovery.js';
 import { discoverFlashArray as runFADiscovery } from '../services/flasharray/flasharrayDiscovery.js';
 import { correlatePortworxToDatastores } from '../services/portworx/portworxCorrelation.js';
+import { correlateFlashArrayToDatastores, correlateFlashArrayToPortworxVolumes } from '../services/flasharray/flasharrayCorrelation.js';
+import { buildPortworxToFASerialMap } from '../services/portworx/portworxPxctl.js';
 
 // In-memory cache for discovered data
 let cachedVMs: VM[] = [];
 let cachedDatastores: Datastore[] = [];
 let cachedClusterInfo: ClusterInfo | null = null;
 let cachedVolumes: FlashArrayVolume[] = [];
+
+/** Run all cross-platform correlations against the current cache. */
+function runAllCorrelations(datastores: Datastore[]): Datastore[] {
+  let ds = datastores;
+  if (cachedClusterInfo?.portworxInfo?.installed) {
+    ds = correlatePortworxToDatastores(ds, cachedClusterInfo.portworxInfo);
+  }
+  if (cachedVolumes.length > 0) {
+    ds = correlateFlashArrayToDatastores(ds, cachedVolumes);
+  }
+  return ds;
+}
+
+/** Re-correlate Portworx volumes to FlashArray volumes and update cluster cache. */
+async function updatePortworxFACorrelation(): Promise<void> {
+  if (!cachedClusterInfo?.portworxInfo || cachedVolumes.length === 0) return;
+
+  const osClient = getClient('openshift');
+  let pxctlSerialMap: Map<string, string> | undefined;
+  if (osClient) {
+    try {
+      pxctlSerialMap = await buildPortworxToFASerialMap(
+        osClient as import('../services/openshift/OpenshiftClient.js').OpenshiftClient,
+        cachedClusterInfo.portworxInfo,
+      );
+      if (pxctlSerialMap.size > 0) {
+        console.log(`[portworx] pxctl serial correlation: ${pxctlSerialMap.size} volumes mapped to FlashArray`);
+      }
+    } catch (err) {
+      console.warn('[portworx] pxctl serial map skipped:', err instanceof Error ? err.message : err);
+    }
+  }
+
+  const updated = correlateFlashArrayToPortworxVolumes(
+    cachedClusterInfo.portworxInfo,
+    cachedVolumes,
+    pxctlSerialMap,
+  );
+  cachedClusterInfo = { ...cachedClusterInfo, portworxInfo: updated };
+}
 
 export async function discoverVMwareVMs(): Promise<{
   vms: VM[];
@@ -78,10 +120,7 @@ export async function discoverVMwareVMs(): Promise<{
     isPortworxBacked: false,
   }));
 
-  // Run Portworx correlation if OpenShift with Portworx has already been discovered
-  if (cachedClusterInfo?.portworxInfo?.installed) {
-    datastores = correlatePortworxToDatastores(datastores, cachedClusterInfo.portworxInfo);
-  }
+  datastores = runAllCorrelations(datastores);
 
   cachedVMs = vms;
   cachedDatastores = datastores;
@@ -100,12 +139,15 @@ export async function discoverOpenShift(): Promise<ClusterInfo> {
 
   cachedClusterInfo = clusterInfo;
 
-  // Re-run Portworx correlation against already-cached VMware datastores
-  if (clusterInfo.portworxInfo?.installed && cachedDatastores.length > 0) {
-    cachedDatastores = correlatePortworxToDatastores(cachedDatastores, clusterInfo.portworxInfo);
+  // Re-correlate Portworx volumes to FlashArray volumes
+  await updatePortworxFACorrelation();
+
+  // Re-run all datastore correlations with fresh OpenShift/Portworx data
+  if (cachedDatastores.length > 0) {
+    cachedDatastores = runAllCorrelations(cachedDatastores);
   }
 
-  return clusterInfo;
+  return cachedClusterInfo;
 }
 
 export async function discoverFlashArray(): Promise<{
@@ -120,6 +162,15 @@ export async function discoverFlashArray(): Promise<{
   const result = await runFADiscovery(flashArrayClient);
 
   cachedVolumes = result.volumes;
+
+  // Correlate FA volumes to Portworx PVs
+  await updatePortworxFACorrelation();
+
+  // Correlate FA volumes to datastores
+  if (cachedDatastores.length > 0) {
+    cachedDatastores = runAllCorrelations(cachedDatastores);
+  }
+
   return result;
 }
 

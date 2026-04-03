@@ -16,6 +16,8 @@ export function usePlatformStatus() {
 
   useEffect(() => {
     refresh();
+    const interval = setInterval(refresh, 15000);
+    return () => clearInterval(interval);
   }, [refresh]);
 
   return { refresh };

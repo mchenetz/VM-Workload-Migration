@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { LoadingSpinner } from './components/shared/LoadingSpinner';
+import { usePlatformStatus } from './hooks/usePlatformStatus';
 
 const DashboardPage = lazy(() =>
   import('./components/dashboard/DashboardPage').then((m) => ({ default: m.DashboardPage }))
@@ -22,6 +23,7 @@ const SchedulePage = lazy(() =>
 );
 
 export function App() {
+  usePlatformStatus();
   return (
     <BrowserRouter>
       <Suspense fallback={<LoadingSpinner />}>
