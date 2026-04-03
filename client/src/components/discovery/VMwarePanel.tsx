@@ -91,7 +91,7 @@ function DifficultyInfoButton() {
           {/* Backdrop */}
           <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
           {/* Popover */}
-          <div className="absolute z-30 left-6 top-0 w-80 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-4 text-xs text-slate-300">
+          <div className="absolute z-30 right-6 top-0 w-80 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-4 text-xs text-slate-300">
             <div className="flex items-center justify-between mb-3">
               <span className="font-semibold text-slate-100 text-sm">Difficulty Scoring</span>
               <button onClick={() => setOpen(false)} className="text-slate-500 hover:text-slate-300 text-base leading-none">✕</button>
