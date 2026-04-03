@@ -384,10 +384,10 @@ export interface PxStorageNode {
   status?: {
     phase?: string;
     nodeUid?: string;
-    network?: { dataIp?: string; mgmtIp?: string };
+    network?: { dataIP?: string; mgmtIP?: string };
     storage?: {
-      totalCapacityRaw?: string;
-      usedRaw?: string;
+      totalSize?: string;
+      usedSize?: string;
       pools?: Array<{
         id?: string;
         totalSize?: string;

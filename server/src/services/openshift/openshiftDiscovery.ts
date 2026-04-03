@@ -62,16 +62,18 @@ async function discoverPortworx(client: OpenshiftClient, storageClasses: K8sStor
 
     // Map StorageNodes to PortworxNode
     const nodes: PortworxNode[] = nodeList.items.map((n) => {
-      const pools = n.status?.storage?.pools ?? [];
-      const poolTotalBytes = pools.reduce((s, p) => s + parseStorageBytes(p.totalSize ?? '0'), 0);
-      const poolUsedBytes = pools.reduce((s, p) => s + parseStorageBytes(p.usedSize ?? '0'), 0);
-      const totalBytes = parseStorageBytes(n.status?.storage?.totalCapacityRaw ?? '0') || poolTotalBytes;
-      const usedBytes = parseStorageBytes(n.status?.storage?.usedRaw ?? '0') || poolUsedBytes;
+      const storage = n.status?.storage;
+      const pools = storage?.pools ?? [];
+      // totalSize / usedSize are the actual field names from the StorageNode CRD
+      const totalBytes = parseStorageBytes(storage?.totalSize ?? '0')
+        || pools.reduce((s, p) => s + parseStorageBytes(p.totalSize ?? '0'), 0);
+      const usedBytes = parseStorageBytes(storage?.usedSize ?? '0')
+        || pools.reduce((s, p) => s + parseStorageBytes(p.usedSize ?? '0'), 0);
       return {
         id: n.status?.nodeUid ?? n.metadata.name,
         hostname: n.metadata.name,
-        ip: n.status?.network?.dataIp ?? n.status?.network?.mgmtIp ?? '',
-        poolCount: pools.length,
+        ip: n.status?.network?.dataIP ?? n.status?.network?.mgmtIP ?? '',
+        poolCount: pools.length || (totalBytes > 0 ? 1 : 0),
         totalCapacityGB: Math.round(totalBytes / (1024 ** 3)),
         usedCapacityGB: Math.round(usedBytes / (1024 ** 3)),
       };
