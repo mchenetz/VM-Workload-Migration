@@ -106,6 +106,41 @@ export class OpenshiftClient {
       return 'unknown';
     }
   }
+
+  async getPortworxStorageCluster(): Promise<PxStorageClusterList> {
+    try {
+      const response = await this.api.get(
+        '/apis/core.libopenstorage.org/v1/storageclusters',
+      );
+      return response.data;
+    } catch {
+      return { items: [] };
+    }
+  }
+
+  async getPortworxStorageNodes(): Promise<PxStorageNodeList> {
+    try {
+      const response = await this.api.get(
+        '/apis/core.libopenstorage.org/v1/storagenodes',
+      );
+      return response.data;
+    } catch {
+      return { items: [] };
+    }
+  }
+
+  async getPortworxPersistentVolumes(): Promise<K8sPVList> {
+    try {
+      const response = await this.api.get('/api/v1/persistentvolumes');
+      const pvList = response.data as K8sPVList;
+      pvList.items = pvList.items.filter(
+        (pv) => pv.spec?.csi?.driver === 'pxd.portworx.com',
+      );
+      return pvList;
+    } catch {
+      return { items: [] };
+    }
+  }
 }
 
 // Kubernetes API response types
@@ -157,4 +192,71 @@ export interface MTVPlan {
     vms?: Array<{ id: string; name?: string }>;
   };
   status?: { conditions?: Array<{ type: string; status: string }> };
+}
+
+export interface PxStorageClusterList {
+  items: PxStorageCluster[];
+}
+
+export interface PxStorageCluster {
+  metadata: { name: string; namespace: string };
+  spec?: {
+    image?: string;
+    storage?: { devices?: string[] };
+    cloudStorage?: { deviceSpecs?: string[] };
+    env?: Array<{ name: string; value?: string }>;
+  };
+  status?: {
+    phase?: string;
+    version?: string;
+    storage?: {
+      totalCapacityRaw?: string;
+      usedRaw?: string;
+      backendProviders?: Array<{ providerName?: string }>;
+    };
+  };
+}
+
+export interface PxStorageNodeList {
+  items: PxStorageNode[];
+}
+
+export interface PxStorageNode {
+  metadata: { name: string; namespace: string };
+  status?: {
+    phase?: string;
+    nodeUid?: string;
+    network?: { dataIp?: string; mgmtIp?: string };
+    storage?: {
+      totalCapacityRaw?: string;
+      usedRaw?: string;
+      pools?: Array<{
+        id?: string;
+        totalSize?: string;
+        usedSize?: string;
+      }>;
+    };
+  };
+}
+
+export interface K8sPVList {
+  items: K8sPV[];
+}
+
+export interface K8sPV {
+  metadata: {
+    name: string;
+    annotations?: Record<string, string>;
+    labels?: Record<string, string>;
+  };
+  spec?: {
+    capacity?: { storage?: string };
+    csi?: {
+      driver?: string;
+      volumeHandle?: string;
+      volumeAttributes?: Record<string, string>;
+    };
+    nfs?: { server?: string; path?: string };
+    persistentVolumeReclaimPolicy?: string;
+  };
 }

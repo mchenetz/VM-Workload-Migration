@@ -17,6 +17,7 @@ export async function discoverVMware(
     freeGB: bytesToGB(ds.free_space),
     isVAAICapable: ds.type === 'VMFS' || ds.type === 'vVol',
     isFlashArrayBacked: false,
+    isPortworxBacked: false,
   }));
 
   const datastoreMap = new Map(datastores.map((ds) => [ds.name, ds]));

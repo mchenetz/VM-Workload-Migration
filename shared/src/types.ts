@@ -30,6 +30,9 @@ export interface Datastore {
   freeGB: number;
   isVAAICapable: boolean;
   isFlashArrayBacked: boolean;
+  isPortworxBacked: boolean;
+  portworxVolumeId?: string;
+  url?: string;
 }
 
 export interface StorageClass {
@@ -46,6 +49,7 @@ export interface ClusterInfo {
   totalMemoryGB: number;
   storageClasses: StorageClass[];
   mtvInstalled: boolean;
+  portworxInfo?: PortworxInfo;
 }
 
 // ── Platform Connections ──
@@ -85,7 +89,7 @@ export type PlatformCredentials =
 
 // ── Calculation ──
 
-export type MigrationMethod = 'network_copy' | 'xcopy';
+export type MigrationMethod = 'network_copy' | 'xcopy' | 'portworx_migration';
 
 export interface TuningParams {
   concurrentTransfers: number;
@@ -185,6 +189,8 @@ export interface CompatibilityResult {
   xcopyReason?: string;
   flasharrayCopy: boolean;
   flasharrayReason?: string;
+  portworxMigration: boolean;
+  portworxReason?: string;
 }
 
 // ── Migration Schedule ──
@@ -264,6 +270,39 @@ export interface ApiResponse<T> {
 
 export interface PlatformStatusResponse {
   platforms: PlatformConnection[];
+}
+
+// ── Portworx ──
+
+export interface PortworxVolume {
+  id: string;
+  name: string;
+  sizeGB: number;
+  replicationFactor: number;
+  backendType: 'flasharray' | 'cloud' | 'generic';
+  ioProfile: string;
+  state: 'running' | 'stopped' | 'degraded';
+}
+
+export interface PortworxNode {
+  id: string;
+  hostname: string;
+  ip: string;
+  poolCount: number;
+  totalCapacityGB: number;
+  usedCapacityGB: number;
+}
+
+export interface PortworxInfo {
+  installed: boolean;
+  version: string;
+  clusterName: string;
+  backendType: 'flasharray' | 'cloud' | 'generic';
+  nodeCount: number;
+  totalCapacityGB: number;
+  usedCapacityGB: number;
+  volumes: PortworxVolume[];
+  nodes: PortworxNode[];
 }
 
 // ── FlashArray ──

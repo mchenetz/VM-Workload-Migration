@@ -10,6 +10,94 @@ import { parseVCenterCSV } from '../../utils/csvImport';
 import { scoreVM, TIER_STYLE } from '../../utils/vmDifficulty';
 import type { VM } from '../../types/vm';
 
+const CSV_EXPORT_STEPS = [
+  {
+    step: 1,
+    title: 'Open the vSphere Client',
+    detail: 'Log in to your vCenter Server via the vSphere Client (Web UI).',
+  },
+  {
+    step: 2,
+    title: 'Navigate to VMs & Templates',
+    detail: 'In the left inventory panel, click the vCenter root or a Datacenter, then select the "VMs and Templates" tab at the top.',
+  },
+  {
+    step: 3,
+    title: 'Select all VMs',
+    detail: 'In the list view, click the column header checkbox to select all VMs, or hold Shift/Ctrl to select a subset.',
+  },
+  {
+    step: 4,
+    title: 'Export to CSV',
+    detail: 'Right-click the selection (or use the Actions menu) and choose Export → Export as CSV. Alternatively, use the toolbar: Actions → Export List.',
+  },
+  {
+    step: 5,
+    title: 'Import here',
+    detail: 'Click "Import CSV" above and select the downloaded file. The tool will parse VM name, OS, CPU, memory, disk, and network from the export.',
+  },
+];
+
+const CSV_REQUIRED_COLUMNS = [
+  'Name', 'DNS Name', 'Power State', 'Guest OS',
+  'CPUs', 'Memory', 'Provisioned Storage', 'In Use Storage',
+  'Network', 'Disks',
+];
+
+function CSVExportGuide() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-lg border border-amber-900/50 bg-amber-950/20 px-4 py-3">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 text-left"
+      >
+        <div className="flex items-center gap-2">
+          <svg className="w-4 h-4 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span className="text-xs font-medium text-amber-300">
+            How to export a VM list CSV from vCenter
+          </span>
+        </div>
+        <svg
+          className={`w-4 h-4 text-amber-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="mt-3 space-y-4">
+          <ol className="space-y-3">
+            {CSV_EXPORT_STEPS.map((s) => (
+              <li key={s.step} className="flex gap-3">
+                <span className="flex-none flex items-center justify-center w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 text-xs font-bold mt-0.5">
+                  {s.step}
+                </span>
+                <div>
+                  <p className="text-xs font-semibold text-slate-300">{s.title}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{s.detail}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+          <div className="border-t border-amber-900/40 pt-3">
+            <p className="text-xs font-semibold text-slate-400 mb-1.5">Columns used by this tool</p>
+            <div className="flex flex-wrap gap-1.5">
+              {CSV_REQUIRED_COLUMNS.map((col) => (
+                <span key={col} className="px-2 py-0.5 rounded bg-slate-700/60 text-xs font-mono text-slate-300">{col}</span>
+              ))}
+            </div>
+            <p className="text-xs text-slate-500 italic mt-2">Extra columns are ignored — export the default vCenter VM list without customisation.</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const POWER_STATE_STATUS = {
   poweredOn: 'connected',
   poweredOff: 'disconnected',
@@ -252,6 +340,7 @@ export function VMwarePanel() {
     return (
       <div className="space-y-4">
         {hiddenInput}
+        <CSVExportGuide />
         <EmptyState
           icon="🔌"
           title="VMware Not Connected"
@@ -260,9 +349,6 @@ export function VMwarePanel() {
             <div className="flex flex-col items-center gap-3">
               {csvButton}
               {importError && <p className="text-xs text-red-400">{importError}</p>}
-              <p className="text-xs text-slate-500">
-                Export from vCenter: VMs &amp; Templates view → Export CSV
-              </p>
             </div>
           }
         />
@@ -274,6 +360,7 @@ export function VMwarePanel() {
     return (
       <div className="space-y-4">
         {hiddenInput}
+        <CSVExportGuide />
         <EmptyState
           icon="🔍"
           title="No VMs Discovered"
@@ -298,6 +385,7 @@ export function VMwarePanel() {
   return (
     <div className="space-y-4">
       {hiddenInput}
+      <CSVExportGuide />
       <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-sm text-slate-400">
           {discoveredVMs.length} VMs {discoveredVMs[0]?.datastoreName === 'imported' ? '(imported)' : 'discovered'} | {formatBytes(totalDisk)} total storage

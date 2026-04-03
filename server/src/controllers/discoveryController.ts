@@ -4,6 +4,7 @@ import type {
   FlashArrayVolume,
   Datastore,
   CompatibilityResult,
+  PortworxInfo,
 } from '@vm-migration/shared';
 import { getClient } from './platformController.js';
 import { VmwareClient } from '../services/vmware/VmwareClient.js';
@@ -11,6 +12,7 @@ import { OpenshiftClient } from '../services/openshift/OpenshiftClient.js';
 import { FlashArrayClient } from '../services/flasharray/FlashArrayClient.js';
 import { discoverOpenShift as runOSDiscovery } from '../services/openshift/openshiftDiscovery.js';
 import { discoverFlashArray as runFADiscovery } from '../services/flasharray/flasharrayDiscovery.js';
+import { correlatePortworxToDatastores } from '../services/portworx/portworxCorrelation.js';
 
 // In-memory cache for discovered data
 let cachedVMs: VM[] = [];
@@ -31,7 +33,6 @@ export async function discoverVMwareVMs(): Promise<{
   const vmSummaries = await vmwareClient.getVMs();
   const datastoreList = await vmwareClient.getDatastores();
 
-  // Map vSphere summaries to our VM type
   const vms: VM[] = await Promise.all(
     vmSummaries.map(async (summary) => {
       const detail = await vmwareClient.getVM(summary.vm);
@@ -44,9 +45,7 @@ export async function discoverVMwareVMs(): Promise<{
       }));
 
       const totalDiskSizeGB = disks.reduce((sum, d) => sum + d.capacityGB, 0);
-      const firstNic = detail.nics
-        ? Object.values(detail.nics)[0]
-        : undefined;
+      const firstNic = detail.nics ? Object.values(detail.nics)[0] : undefined;
 
       return {
         id: summary.vm,
@@ -68,8 +67,7 @@ export async function discoverVMwareVMs(): Promise<{
     }),
   );
 
-  // Map datastores
-  const datastores: Datastore[] = datastoreList.map((ds) => ({
+  let datastores: Datastore[] = datastoreList.map((ds) => ({
     id: ds.datastore,
     name: ds.name,
     type: ds.type as Datastore['type'],
@@ -77,7 +75,13 @@ export async function discoverVMwareVMs(): Promise<{
     freeGB: Math.round(ds.free_space / (1024 * 1024 * 1024)),
     isVAAICapable: ds.type === 'VMFS',
     isFlashArrayBacked: false,
+    isPortworxBacked: false,
   }));
+
+  // Run Portworx correlation if OpenShift with Portworx has already been discovered
+  if (cachedClusterInfo?.portworxInfo?.installed) {
+    datastores = correlatePortworxToDatastores(datastores, cachedClusterInfo.portworxInfo);
+  }
 
   cachedVMs = vms;
   cachedDatastores = datastores;
@@ -95,6 +99,12 @@ export async function discoverOpenShift(): Promise<ClusterInfo> {
   const clusterInfo = await runOSDiscovery(openshiftClient);
 
   cachedClusterInfo = clusterInfo;
+
+  // Re-run Portworx correlation against already-cached VMware datastores
+  if (clusterInfo.portworxInfo?.installed && cachedDatastores.length > 0) {
+    cachedDatastores = correlatePortworxToDatastores(cachedDatastores, clusterInfo.portworxInfo);
+  }
+
   return clusterInfo;
 }
 
@@ -118,19 +128,37 @@ export function getCompatibility(): CompatibilityResult[] {
     throw new Error('No VMware VMs discovered yet. Run VMware discovery first.');
   }
 
+  const storageClasses = cachedClusterInfo?.storageClasses ?? [];
+  const portworxInfo = cachedClusterInfo?.portworxInfo;
+
   return cachedVMs.map((vm) => {
-    // Network copy is always compatible
     const networkCopy = true;
 
-    // XCopy requires VAAI-capable datastores (VMFS)
     const datastoreInfo = cachedDatastores.find((ds) => ds.name === vm.datastoreName);
     const xcopy = datastoreInfo?.isVAAICapable ?? false;
     const xcopyReason = !xcopy ? 'Datastore is not VAAI-capable (requires VMFS)' : undefined;
 
-    // FlashArray copy requires FlashArray-backed storage and discovered volumes
-    const flasharrayCopy = datastoreInfo?.isFlashArrayBacked ?? false;
+    const hasPure = storageClasses.some((sc) => sc.provisioner.toLowerCase().includes('pure'));
+    const flasharrayCopy = (datastoreInfo?.isFlashArrayBacked ?? false) && hasPure;
     const flasharrayReason = !flasharrayCopy
-      ? 'VM storage is not backed by a FlashArray volume'
+      ? (!datastoreInfo?.isFlashArrayBacked
+        ? 'VM storage is not backed by a FlashArray volume'
+        : 'No storage class with a Pure Storage provisioner found')
+      : undefined;
+
+    const hasPortworxCSI = storageClasses.some(
+      (sc) => sc.provisioner.toLowerCase().includes('portworx') || sc.provisioner === 'pxd.portworx.com',
+    );
+    const portworxMigration =
+      (portworxInfo?.installed ?? false) &&
+      (datastoreInfo?.isPortworxBacked ?? false) &&
+      hasPortworxCSI;
+    const portworxReason = !portworxMigration
+      ? (!portworxInfo?.installed
+        ? 'Portworx not detected in the OpenShift cluster'
+        : !datastoreInfo?.isPortworxBacked
+          ? 'Datastore is not backed by a Portworx volume'
+          : 'No Portworx CSI storage class found in OpenShift')
       : undefined;
 
     return {
@@ -141,6 +169,8 @@ export function getCompatibility(): CompatibilityResult[] {
       xcopyReason,
       flasharrayCopy,
       flasharrayReason,
+      portworxMigration,
+      portworxReason,
     };
   });
 }
@@ -151,15 +181,9 @@ export function getCachedVMs(): VM[] {
 
 export function importVMs(vms: VM[]): void {
   cachedVMs = vms;
-  // Reset datastores to empty when using imported VMs
   cachedDatastores = [];
 }
 
-/**
- * Returns the VM source type and which migration methods are available.
- * - 'imported': VMs came from CSV; method compatibility is unknown
- * - 'discovered': VMs came from vCenter; use datastore info to determine methods
- */
 export function getVMSource(): {
   source: 'imported' | 'discovered' | 'none';
   availableMethods: Array<{ method: string; label: string; compatible: boolean; reason?: string }>;
@@ -182,9 +206,14 @@ export function getVMSource(): {
     };
   }
 
-  // Discovered: derive method availability from datastores
+  const storageClasses = cachedClusterInfo?.storageClasses ?? [];
+  const portworxInfo: PortworxInfo | undefined = cachedClusterInfo?.portworxInfo;
+
   const anyVAAI     = cachedVMs.some((vm) => cachedDatastores.find((ds) => ds.name === vm.datastoreName)?.isVAAICapable);
   const anyFlash    = cachedVMs.some((vm) => cachedDatastores.find((ds) => ds.name === vm.datastoreName)?.isFlashArrayBacked);
+  const anyPortworx = cachedVMs.some((vm) => cachedDatastores.find((ds) => ds.name === vm.datastoreName)?.isPortworxBacked);
+  const hasPure     = storageClasses.some((sc) => sc.provisioner.toLowerCase().includes('pure'));
+  const hasPxCSI    = storageClasses.some((sc) => sc.provisioner.toLowerCase().includes('portworx') || sc.provisioner === 'pxd.portworx.com');
 
   const methods = [
     { method: 'network_copy', label: 'Network Copy', compatible: true },
@@ -193,12 +222,29 @@ export function getVMSource(): {
       reason: anyVAAI ? undefined : 'No VAAI-capable (VMFS) datastores found',
     },
     {
-      method: 'xcopy', label: 'FlashArray XCopy', compatible: anyFlash,
-      reason: anyFlash ? undefined : 'No FlashArray-backed datastores found',
+      method: 'flasharray_copy', label: 'FlashArray Copy', compatible: anyFlash && hasPure,
+      reason: anyFlash && hasPure ? undefined : 'No FlashArray-backed datastores or Pure CSI not found',
+    },
+    {
+      method: 'portworx_migration', label: 'Portworx Migration',
+      compatible: !!(anyPortworx && portworxInfo?.installed && hasPxCSI),
+      reason: anyPortworx && portworxInfo?.installed && hasPxCSI
+        ? undefined
+        : !portworxInfo?.installed
+          ? 'Portworx not detected in OpenShift'
+          : !anyPortworx
+            ? 'No Portworx-backed datastores found'
+            : 'No Portworx CSI storage class found in OpenShift',
     },
   ];
 
-  const recommended = anyFlash ? 'xcopy' : anyVAAI ? 'xcopy' : 'network_copy';
+  const recommended = anyPortworx && portworxInfo?.installed && hasPxCSI
+    ? 'portworx_migration'
+    : anyFlash && hasPure
+      ? 'xcopy'
+      : anyVAAI
+        ? 'xcopy'
+        : 'network_copy';
 
   return { source: 'discovered', availableMethods: methods, recommendedMethod: recommended };
 }

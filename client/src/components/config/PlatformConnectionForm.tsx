@@ -3,7 +3,129 @@ import { useAppStore } from '../../store';
 import { connectPlatform, disconnectPlatform, testPlatformConnection } from '../../api/platforms';
 import { Card } from '../shared/Card';
 import { StatusDot } from '../shared/StatusDot';
+import { PermissionsInfo } from '../shared/PermissionsInfo';
 import type { PlatformType } from '../../types/platform';
+
+const PERMISSIONS_DATA: Record<string, { platform: string; userLabel: string; permissions: { object: string; privileges: string[] }[]; notes: string[] }> = {
+  vmware: {
+    platform: 'vCenter',
+    userLabel: 'service account',
+    permissions: [
+      {
+        object: 'vCenter (read-only)',
+        privileges: [
+          'System.Anonymous',
+          'System.Read',
+          'System.View',
+        ],
+      },
+      {
+        object: 'VM Inventory',
+        privileges: [
+          'VirtualMachine.Config.QueryUnownedFiles',
+          'VirtualMachine.Interact.PowerOn',
+          'VirtualMachine.Interact.PowerOff',
+          'VirtualMachine.Inventory.Register',
+        ],
+      },
+      {
+        object: 'Datastores',
+        privileges: [
+          'Datastore.Browse',
+          'Datastore.FileManagement',
+        ],
+      },
+      {
+        object: 'Network',
+        privileges: [
+          'Network.Assign',
+        ],
+      },
+      {
+        object: 'Host',
+        privileges: [
+          'Host.Config.Storage',
+          'Host.Local.ReconfigVM',
+        ],
+      },
+    ],
+    notes: [
+      'A read-only role at the vCenter root with propagation is sufficient for discovery.',
+      'Additional privileges are required if migration is triggered directly from vCenter.',
+    ],
+  },
+  openshift: {
+    platform: 'OpenShift',
+    userLabel: 'service account',
+    permissions: [
+      {
+        object: 'Cluster-level (ClusterRole)',
+        privileges: [
+          'get, list, watch — nodes',
+          'get, list, watch — namespaces',
+          'get, list, watch — storageclasses',
+          'get, list, watch — persistentvolumes',
+          'get, list, watch — clusterversions',
+        ],
+      },
+      {
+        object: 'Portworx CRDs (if installed)',
+        privileges: [
+          'get, list — storageclusters.core.libopenstorage.org',
+          'get, list — storagenodes.core.libopenstorage.org',
+        ],
+      },
+      {
+        object: 'MTV Namespace (Role)',
+        privileges: [
+          'get, list, watch — virtualmachines (kubevirt.io)',
+          'get, list, watch — plans, migrations (forklift.konveyor.io)',
+          'create, update — plans (forklift.konveyor.io)',
+        ],
+      },
+      {
+        object: 'Built-in ClusterRole (optional baseline)',
+        privileges: [
+          'cluster-reader — read-only access to most cluster resources',
+        ],
+      },
+    ],
+    notes: [
+      'A ServiceAccount with a bound ClusterRole is recommended over a personal user token.',
+      'MTV (Migration Toolkit for Virtualization) must be installed for migration plan creation.',
+      'Portworx CRD permissions are optional — only needed if Portworx is installed.',
+      'Namespace-scoped role is only required if you scope MTV plans to a specific namespace.',
+    ],
+  },
+  flasharray: {
+    platform: 'FlashArray',
+    userLabel: 'API token',
+    permissions: [
+      {
+        object: 'Array Role (REST API)',
+        privileges: [
+          'Array Monitor — read-only access to array metrics and status',
+          'GET /api/2.x/volumes — list volumes and capacity',
+          'GET /api/2.x/arrays/performance — array-level performance metrics',
+          'GET /api/2.x/hosts, /host-connections — host connectivity info',
+        ],
+      },
+      {
+        object: 'Not Required',
+        privileges: [
+          'Array Admin role — not needed for discovery',
+          'Storage Admin role — not needed for read-only queries',
+          'Write/modify permissions — read-only API token is sufficient',
+        ],
+      },
+    ],
+    notes: [
+      'Create a dedicated read-only API token in the FlashArray GUI under System → Users.',
+      'Array Monitor role is the minimum built-in role; do not use Array Admin for discovery.',
+      'The API token is passed as the Authorization header (Bearer token) to the REST API.',
+    ],
+  },
+};
 
 interface PlatformConnectionFormProps {
   type: 'vmware' | 'openshift' | 'flasharray';
@@ -79,8 +201,20 @@ export function PlatformConnectionForm({ type, title, description }: PlatformCon
     setCredentials((prev) => ({ ...prev, [key]: value }));
   }
 
+  const perms = PERMISSIONS_DATA[type];
+
   return (
     <Card>
+      {perms && (
+        <div className="mb-4">
+          <PermissionsInfo
+            platform={perms.platform}
+            userLabel={perms.userLabel}
+            permissions={perms.permissions}
+            notes={perms.notes}
+          />
+        </div>
+      )}
       <div className="flex items-start justify-between mb-4">
         <div>
           <h3 className="text-lg font-semibold text-slate-100">{title}</h3>
