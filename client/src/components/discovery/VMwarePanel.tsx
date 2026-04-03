@@ -52,6 +52,92 @@ function CompatibilityBadges({ vm }: { vm: VM }) {
   );
 }
 
+const SCORING_FACTORS = [
+  { label: 'Windows Server',           points: '+2', note: 'agent/quiesce complexity' },
+  { label: 'Windows Desktop',          points: '+1', note: '' },
+  { label: 'Appliance / BSD / Other',  points: '+3', note: 'may not support agents' },
+  { label: 'Unknown OS',               points: '+2', note: 'manual validation needed' },
+  { label: 'Linux',                    points:  '0', note: 'baseline' },
+  { label: 'Powered on (live)',        points: '+1', note: '' },
+  { label: 'Disk > 1 TB',             points: '+2', note: '' },
+  { label: 'Disk 500 GB – 1 TB',      points: '+1', note: '' },
+  { label: 'More than 4 disks',       points: '+1', note: '' },
+  { label: 'vCPUs > 16',              points: '+1', note: '' },
+  { label: 'Memory > 64 GB',          points: '+1', note: '' },
+  { label: 'Multiple NICs',           points: '+1', note: '' },
+];
+
+const TIER_THRESHOLDS = [
+  { tier: 'Easy',    range: '0 – 1', color: 'text-green-400' },
+  { tier: 'Medium',  range: '2 – 3', color: 'text-yellow-400' },
+  { tier: 'Hard',    range: '4 – 5', color: 'text-orange-400' },
+  { tier: 'Complex', range: '6 +',   color: 'text-red-400' },
+];
+
+function DifficultyInfoButton() {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="relative inline-flex items-center">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="ml-1 w-4 h-4 rounded-full bg-slate-600 hover:bg-slate-500 text-slate-300 hover:text-white text-[10px] font-bold leading-none flex items-center justify-center transition-colors"
+        title="Scoring factors"
+        aria-label="Show difficulty scoring factors"
+      >
+        i
+      </button>
+      {open && (
+        <>
+          {/* Backdrop */}
+          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
+          {/* Popover */}
+          <div className="absolute z-30 left-6 top-0 w-80 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-4 text-xs text-slate-300">
+            <div className="flex items-center justify-between mb-3">
+              <span className="font-semibold text-slate-100 text-sm">Difficulty Scoring</span>
+              <button onClick={() => setOpen(false)} className="text-slate-500 hover:text-slate-300 text-base leading-none">✕</button>
+            </div>
+
+            <p className="text-slate-400 mb-3">
+              Each VM is scored on the factors below. The total determines its migration tier.
+            </p>
+
+            <table className="w-full mb-3">
+              <thead>
+                <tr className="text-slate-500 border-b border-slate-700">
+                  <th className="text-left pb-1 font-medium">Factor</th>
+                  <th className="text-right pb-1 font-medium pr-2">Pts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {SCORING_FACTORS.map((f) => (
+                  <tr key={f.label} className="border-b border-slate-800/60">
+                    <td className="py-1">
+                      {f.label}
+                      {f.note && <span className="text-slate-500 ml-1">({f.note})</span>}
+                    </td>
+                    <td className={`py-1 text-right pr-2 font-mono font-semibold ${f.points === '0' ? 'text-slate-500' : 'text-blue-400'}`}>
+                      {f.points}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div className="grid grid-cols-2 gap-1">
+              {TIER_THRESHOLDS.map((t) => (
+                <div key={t.tier} className="flex items-center gap-2 bg-slate-800 rounded px-2 py-1">
+                  <span className={`font-semibold ${t.color}`}>{t.tier}</span>
+                  <span className="text-slate-500">{t.range}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </span>
+  );
+}
+
 function DifficultyBadge({ vm }: { vm: VM }) {
   const { tier, score, reasons } = scoreVM(vm);
   return (
@@ -250,7 +336,12 @@ export function VMwarePanel() {
                 <th className="px-4 py-3 font-medium text-right">Memory</th>
                 <th className="px-4 py-3 font-medium text-right">Total Disk</th>
                 <th className="px-4 py-3 font-medium">Datastore</th>
-                <th className="px-4 py-3 font-medium">Difficulty</th>
+                <th className="px-4 py-3 font-medium">
+                  <span className="inline-flex items-center gap-0.5">
+                    Difficulty
+                    <DifficultyInfoButton />
+                  </span>
+                </th>
                 {!isImported && <th className="px-4 py-3 font-medium">Compatibility</th>}
               </tr>
             </thead>
