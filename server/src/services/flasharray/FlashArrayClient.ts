@@ -6,6 +6,8 @@ export class FlashArrayClient {
   private apiToken: string;
   private authToken: string | null = null;
   private api: AxiosInstance;
+  /** Highest supported 2.x API version, e.g. "2.36". Detected at connect time. */
+  private bestApiVersion = '2.0';
 
   constructor(endpoint: string, apiToken: string) {
     this.endpoint = endpoint;
@@ -48,6 +50,18 @@ export class FlashArrayClient {
 
   async connect(): Promise<void> {
     try {
+      // Detect the highest supported 2.x API version
+      try {
+        const versionRes = await this.api.get('/api/api_version');
+        const versions: string[] = versionRes.data?.version ?? [];
+        const v2 = versions.filter((v) => v.startsWith('2.')).sort((a, b) => {
+          const [, am] = a.split('.').map(Number);
+          const [, bm] = b.split('.').map(Number);
+          return am - bm;
+        });
+        if (v2.length > 0) this.bestApiVersion = v2[v2.length - 1];
+      } catch { /* ignore — fall back to 2.0 */ }
+
       const response = await this.api.post('/api/2.0/login', null, {
         headers: { 'api-token': this.apiToken },
       });
@@ -83,7 +97,7 @@ export class FlashArrayClient {
 
   async getPerformance(): Promise<PurePerformanceResponse> {
     try {
-      const response = await this.api.get('/api/2.0/arrays/performance');
+      const response = await this.api.get(`/api/${this.bestApiVersion}/arrays/performance`);
       const data = response.data;
       if (Array.isArray(data)) {
         return { items: data };
