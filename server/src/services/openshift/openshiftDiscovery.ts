@@ -1,8 +1,10 @@
-import type { ClusterInfo, StorageClass, PortworxInfo, PortworxVolume, PortworxNode } from '@vm-migration/shared';
-import type { OpenshiftClient, PxStorageCluster, K8sStorageClass } from './OpenshiftClient.js';
+import type { ClusterInfo, StorageClass, PortworxInfo, PortworxVolume, PortworxNode, OpenShiftVM } from '@vm-migration/shared';
+import type { OpenshiftClient, PxStorageCluster, K8sStorageClass, KubeVirtVM } from './OpenshiftClient.js';
 
 export async function discoverOpenShift(
   client: OpenshiftClient,
+  /** VMware VM names for migration correlation (optional) */
+  vmwareVMNames: string[] = [],
 ): Promise<ClusterInfo> {
   const [nodeList, storageClassList] = await Promise.all([
     client.getNodes(),
@@ -29,6 +31,7 @@ export async function discoverOpenShift(
 
   const mtvInstalled = await checkMTVInstalled(client);
   const portworxInfo = await discoverPortworx(client, storageClassList.items);
+  const virtualMachines = await discoverVirtualMachines(client, vmwareVMNames);
 
   return {
     name: nodeList.items[0]?.metadata.labels?.['kubernetes.io/cluster-name'] ?? 'openshift-cluster',
@@ -38,6 +41,7 @@ export async function discoverOpenShift(
     storageClasses,
     mtvInstalled,
     portworxInfo: portworxInfo ?? undefined,
+    virtualMachines,
   };
 }
 
@@ -120,6 +124,81 @@ async function discoverPortworx(client: OpenshiftClient, storageClasses: K8sStor
     };
   } catch {
     return null;
+  }
+}
+
+async function discoverVirtualMachines(
+  client: OpenshiftClient,
+  vmwareVMNames: string[],
+): Promise<OpenShiftVM[]> {
+  try {
+    const [vmList, migrationList] = await Promise.all([
+      client.getVirtualMachines(),
+      client.getMTVMigrations('openshift-mtv').catch(() => ({ items: [] })),
+    ]);
+
+    if (vmList.items.length === 0) return [];
+
+    // Build set of plan names referenced by completed migrations
+    const completedPlanNames = new Set<string>();
+    for (const m of migrationList.items) {
+      const succeeded = m.status?.conditions?.some(
+        (c) => c.type === 'Succeeded' && c.status === 'True',
+      );
+      if (succeeded && m.spec?.plan?.name) {
+        completedPlanNames.add(m.spec.plan.name);
+      }
+    }
+
+    const vmwareNamesLower = new Set(vmwareVMNames.map((n) => n.toLowerCase()));
+
+    return vmList.items.map((vm: KubeVirtVM): OpenShiftVM => {
+      const labels = vm.metadata.labels ?? {};
+      const annotations = vm.metadata.annotations ?? {};
+
+      // MTV/Forklift stamps these labels on migrated VMs
+      const mtvPlanName =
+        labels['forklift.konveyor.io/plan'] ??
+        annotations['forklift.konveyor.io/plan'] ??
+        undefined;
+      const migratedViaMTV = !!(
+        mtvPlanName ||
+        labels['forklift.konveyor.io/migration'] ||
+        annotations['forklift.konveyor.io/migration']
+      );
+
+      // Name-match against known VMware VMs
+      const sourceVMwareName = vmwareNamesLower.has(vm.metadata.name.toLowerCase())
+        ? vmwareVMNames.find((n) => n.toLowerCase() === vm.metadata.name.toLowerCase())
+        : undefined;
+
+      const domain = vm.spec?.template?.spec?.domain;
+      const cpu = domain?.cpu;
+      const cores = (cpu?.sockets ?? 1) * (cpu?.cores ?? 1) * (cpu?.threads ?? 1) || 1;
+      const memoryStr = domain?.memory?.guest ?? '0';
+      const memoryGB = parseStorageBytes(memoryStr) / (1024 ** 3);
+
+      const rawStatus = vm.status?.printableStatus ?? 'Unknown';
+      const status: OpenShiftVM['status'] =
+        rawStatus === 'Running' ? 'Running'
+        : rawStatus === 'Stopped' ? 'Stopped'
+        : rawStatus === 'Paused' ? 'Paused'
+        : rawStatus === 'Migrating' ? 'Migrating'
+        : 'Unknown';
+
+      return {
+        name: vm.metadata.name,
+        namespace: vm.metadata.namespace,
+        status,
+        vCPUs: cores,
+        memoryGB: Math.round(memoryGB * 10) / 10,
+        migratedViaMTV,
+        mtvPlanName,
+        sourceVMwareName,
+      };
+    });
+  } catch {
+    return [];
   }
 }
 

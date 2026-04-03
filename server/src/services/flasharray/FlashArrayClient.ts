@@ -142,6 +142,11 @@ export interface PureVolumeResponse {
 export interface PurePerformanceItem {
   reads_per_sec?: number;
   writes_per_sec?: number;
+  /** Bytes/sec read — FA REST API 2.x field name */
+  read_bytes_per_sec?: number;
+  /** Bytes/sec written — FA REST API 2.x field name */
+  write_bytes_per_sec?: number;
+  /** Legacy field names present in some Purity versions */
   input_per_sec?: number;
   output_per_sec?: number;
   usec_per_read_op?: number;

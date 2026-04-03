@@ -43,6 +43,21 @@ export interface StorageClass {
   volumeBindingMode: string;
 }
 
+export interface OpenShiftVM {
+  name: string;
+  namespace: string;
+  /** KubeVirt printable status */
+  status: 'Running' | 'Stopped' | 'Paused' | 'Migrating' | 'Unknown';
+  vCPUs: number;
+  memoryGB: number;
+  /** Whether this VM has MTV/Forklift migration annotations */
+  migratedViaMTV: boolean;
+  /** MTV plan name used for migration, if detectable */
+  mtvPlanName?: string;
+  /** Name of the matched VMware source VM */
+  sourceVMwareName?: string;
+}
+
 export interface ClusterInfo {
   name: string;
   nodeCount: number;
@@ -51,6 +66,7 @@ export interface ClusterInfo {
   storageClasses: StorageClass[];
   mtvInstalled: boolean;
   portworxInfo?: PortworxInfo;
+  virtualMachines: OpenShiftVM[];
 }
 
 // ── Platform Connections ──

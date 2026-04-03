@@ -134,7 +134,8 @@ export async function discoverOpenShift(): Promise<ClusterInfo> {
   }
 
   const openshiftClient = client as OpenshiftClient;
-  const clusterInfo = await runOSDiscovery(openshiftClient);
+  const vmwareNames = cachedVMs.map((v) => v.name);
+  const clusterInfo = await runOSDiscovery(openshiftClient, vmwareNames);
 
   cachedClusterInfo = clusterInfo;
 

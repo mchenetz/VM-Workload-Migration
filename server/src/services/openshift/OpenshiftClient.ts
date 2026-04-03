@@ -144,6 +144,26 @@ export class OpenshiftClient {
     }
   }
 
+  async getVirtualMachines(): Promise<KubeVirtVMList> {
+    try {
+      const response = await this.api.get('/apis/kubevirt.io/v1/virtualmachines');
+      return response.data;
+    } catch {
+      return { items: [] };
+    }
+  }
+
+  async getMTVMigrations(namespace: string): Promise<MTVMigrationList> {
+    try {
+      const response = await this.api.get(
+        `/apis/forklift.konveyor.io/v1beta1/namespaces/${namespace}/migrations`,
+      );
+      return response.data;
+    } catch {
+      return { items: [] };
+    }
+  }
+
   async secretExists(namespace: string, name: string): Promise<boolean> {
     try {
       await this.api.get(`/api/v1/namespaces/${namespace}/secrets/${name}`);
@@ -399,6 +419,48 @@ export interface PxStorageNode {
 
 export interface K8sPVList {
   items: K8sPV[];
+}
+
+export interface KubeVirtVMList {
+  items: KubeVirtVM[];
+}
+
+export interface KubeVirtVM {
+  metadata: {
+    name: string;
+    namespace: string;
+    labels?: Record<string, string>;
+    annotations?: Record<string, string>;
+  };
+  spec?: {
+    template?: {
+      spec?: {
+        domain?: {
+          cpu?: { cores?: number; sockets?: number; threads?: number };
+          memory?: { guest?: string };
+        };
+      };
+    };
+  };
+  status?: {
+    /** e.g. "Running", "Stopped", "Paused", "Migrating" */
+    printableStatus?: string;
+    ready?: boolean;
+  };
+}
+
+export interface MTVMigrationList {
+  items: MTVMigration[];
+}
+
+export interface MTVMigration {
+  metadata: { name: string; namespace: string };
+  spec?: {
+    plan?: { name?: string; namespace?: string };
+  };
+  status?: {
+    conditions?: Array<{ type: string; status: string }>;
+  };
 }
 
 export interface K8sPV {

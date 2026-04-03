@@ -40,8 +40,10 @@ export async function discoverFlashArray(
   const perfItem = performanceResponse.items[0];
 
   const performance: FlashArrayPerformance = {
-    readBandwidthMBs: bytesToMB(perfItem?.output_per_sec ?? 0),
-    writeBandwidthMBs: bytesToMB(perfItem?.input_per_sec ?? 0),
+    // FA REST API 2.x uses read_bytes_per_sec / write_bytes_per_sec;
+    // older Purity versions may use output_per_sec / input_per_sec as fallback.
+    readBandwidthMBs: bytesToMB(perfItem?.read_bytes_per_sec ?? perfItem?.output_per_sec ?? 0),
+    writeBandwidthMBs: bytesToMB(perfItem?.write_bytes_per_sec ?? perfItem?.input_per_sec ?? 0),
     readIOPS: perfItem?.reads_per_sec ?? 0,
     writeIOPS: perfItem?.writes_per_sec ?? 0,
     latencyUs: perfItem?.usec_per_read_op ?? 0,

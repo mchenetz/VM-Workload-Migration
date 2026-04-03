@@ -44,6 +44,17 @@ interface PortworxInfo {
   nodes: PortworxNode[];
 }
 
+interface OpenShiftVM {
+  name: string;
+  namespace: string;
+  status: 'Running' | 'Stopped' | 'Paused' | 'Migrating' | 'Unknown';
+  vCPUs: number;
+  memoryGB: number;
+  migratedViaMTV: boolean;
+  mtvPlanName?: string;
+  sourceVMwareName?: string;
+}
+
 interface ClusterData {
   nodeCount: number;
   totalCPU: number;
@@ -51,6 +62,112 @@ interface ClusterData {
   storageClasses: StorageClass[];
   mtvInstalled: boolean;
   portworxInfo?: PortworxInfo;
+  virtualMachines?: OpenShiftVM[];
+}
+
+function VMsSection({ vms }: { vms: OpenShiftVM[] }) {
+  const [showVMs, setShowVMs] = useState(false);
+
+  const runningCount = vms.filter((v) => v.status === 'Running').length;
+  const migratedCount = vms.filter((v) => v.migratedViaMTV).length;
+  const correlatedCount = vms.filter((v) => v.sourceVMwareName).length;
+
+  const statusColor = (status: OpenShiftVM['status']) => {
+    if (status === 'Running') return 'text-green-400 bg-green-500/20';
+    if (status === 'Stopped') return 'text-slate-400 bg-slate-500/20';
+    if (status === 'Paused') return 'text-yellow-400 bg-yellow-500/20';
+    if (status === 'Migrating') return 'text-blue-400 bg-blue-500/20';
+    return 'text-slate-500 bg-slate-700/40';
+  };
+
+  return (
+    <Card title="Virtual Machines">
+      <div className="space-y-4">
+        {/* Summary stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <p className="text-xs text-slate-500 uppercase mb-1">Total VMs</p>
+            <p className="text-sm font-semibold text-slate-200">{vms.length}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 uppercase mb-1">Running</p>
+            <p className="text-sm font-semibold text-green-400">{runningCount}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 uppercase mb-1">Migrated via MTV</p>
+            <p className="text-sm font-semibold text-purple-400">{migratedCount}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 uppercase mb-1">From VMware</p>
+            <p className="text-sm font-semibold text-orange-400">{correlatedCount}</p>
+          </div>
+        </div>
+
+        {/* VM list toggle */}
+        <div>
+          <button
+            onClick={() => setShowVMs((v) => !v)}
+            className="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-200 transition"
+          >
+            <svg className={`w-3 h-3 transition-transform ${showVMs ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+            {showVMs ? 'Hide' : 'Show'} {vms.length} VM{vms.length !== 1 ? 's' : ''}
+          </button>
+          {showVMs && (
+            <div className="mt-2 overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-slate-800/50 text-slate-400 text-xs uppercase tracking-wider">
+                    <th className="px-3 py-2 font-medium">Name</th>
+                    <th className="px-3 py-2 font-medium">Namespace</th>
+                    <th className="px-3 py-2 font-medium">Status</th>
+                    <th className="px-3 py-2 font-medium text-right">vCPU</th>
+                    <th className="px-3 py-2 font-medium text-right">Mem</th>
+                    <th className="px-3 py-2 font-medium">Origin</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-700">
+                  {vms.map((vm) => (
+                    <tr key={`${vm.namespace}/${vm.name}`} className="hover:bg-slate-700/50 transition">
+                      <td className="px-3 py-2 text-slate-200 text-sm font-medium">{vm.name}</td>
+                      <td className="px-3 py-2 text-slate-400 text-sm font-mono">{vm.namespace}</td>
+                      <td className="px-3 py-2">
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColor(vm.status)}`}>
+                          {vm.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-slate-400 text-sm text-right">{vm.vCPUs || '—'}</td>
+                      <td className="px-3 py-2 text-slate-400 text-sm text-right">
+                        {vm.memoryGB > 0 ? `${vm.memoryGB} GB` : '—'}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-col gap-0.5">
+                          {vm.sourceVMwareName && (
+                            <span className="px-2 py-0.5 rounded text-xs font-medium bg-orange-500/20 text-orange-400" title={`VMware source: ${vm.sourceVMwareName}`}>
+                              VMware
+                            </span>
+                          )}
+                          {vm.migratedViaMTV && (
+                            <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-500/20 text-purple-400" title={vm.mtvPlanName ? `MTV Plan: ${vm.mtvPlanName}` : 'Migrated via MTV'}>
+                              MTV{vm.mtvPlanName ? `: ${vm.mtvPlanName}` : ''}
+                            </span>
+                          )}
+                          {!vm.sourceVMwareName && !vm.migratedViaMTV && (
+                            <span className="text-xs text-slate-600">Native</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
 }
 
 function PortworxSection({ info }: { info: PortworxInfo }) {
@@ -342,6 +459,10 @@ export function OpenShiftPanel() {
 
       {clusterInfo.portworxInfo?.installed && (
         <PortworxSection info={clusterInfo.portworxInfo} />
+      )}
+
+      {clusterInfo.virtualMachines && clusterInfo.virtualMachines.length > 0 && (
+        <VMsSection vms={clusterInfo.virtualMachines} />
       )}
 
       <Card title="Storage Classes">
