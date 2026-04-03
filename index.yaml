@@ -2,8 +2,28 @@ apiVersion: v1
 entries:
   vm-migration-estimator:
   - apiVersion: v2
+    appVersion: 1.1.6
+    created: "2026-04-03T14:16:40.67312124Z"
+    description: VM Workload Migration Time Estimator for OpenShift MTV/Forklift
+    digest: 858180fb9f16cfb835469f04b7df8c59a82cff58082240ef01c82f2051ff38fd
+    home: https://github.com/mchenetz/VM-Workload-Migration
+    keywords:
+    - vmware
+    - openshift
+    - migration
+    - forklift
+    - mtv
+    - flasharray
+    maintainers:
+    - name: mchenetz
+    name: vm-migration-estimator
+    type: application
+    urls:
+    - https://mchenetz.github.io/VM-Workload-Migration/vm-migration-estimator-1.1.6.tgz
+    version: 1.1.6
+  - apiVersion: v2
     appVersion: 1.1.5
-    created: "2026-04-03T13:50:38.615194235Z"
+    created: "2026-04-03T14:16:40.672600718Z"
     description: VM Workload Migration Time Estimator for OpenShift MTV/Forklift
     digest: c04e6420c374cf4d51f3446bc3afefc3dfe3ec8553d37fe805739c5747c1bf87
     home: https://github.com/mchenetz/VM-Workload-Migration
@@ -23,7 +43,7 @@ entries:
     version: 1.1.5
   - apiVersion: v2
     appVersion: 1.1.4
-    created: "2026-04-03T13:50:38.614727616Z"
+    created: "2026-04-03T14:16:40.671223984Z"
     description: VM Workload Migration Time Estimator for OpenShift MTV/Forklift
     digest: b395e1613101b5d079770c371e5b26f3f4aee4845b3190a7ea189cfb374694a0
     home: https://github.com/mchenetz/VM-Workload-Migration
@@ -43,7 +63,7 @@ entries:
     version: 1.1.4
   - apiVersion: v2
     appVersion: 1.1.3
-    created: "2026-04-03T13:50:38.614170889Z"
+    created: "2026-04-03T14:16:40.670620948Z"
     description: VM Workload Migration Time Estimator for OpenShift MTV/Forklift
     digest: 668724699199f2cd2a62d474471abf040c8f177333c05be2bc14664afd8e168b
     home: https://github.com/mchenetz/VM-Workload-Migration
@@ -63,7 +83,7 @@ entries:
     version: 1.1.3
   - apiVersion: v2
     appVersion: 1.1.2
-    created: "2026-04-03T13:50:38.613033501Z"
+    created: "2026-04-03T14:16:40.670169885Z"
     description: VM Workload Migration Time Estimator for OpenShift MTV/Forklift
     digest: 38f54def7ad3d7ee00eedc99b5534a52a10de8ea33ac4d9baac8f810c07009f3
     home: https://github.com/mchenetz/VM-Workload-Migration
@@ -83,7 +103,7 @@ entries:
     version: 1.1.2
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-04-03T13:50:38.61223851Z"
+    created: "2026-04-03T14:16:40.669674791Z"
     description: VM Workload Migration Time Estimator for OpenShift MTV/Forklift
     digest: 16c78033d207df3bac18b360379e67f436fee6005e11c791fa52b821831c0227
     home: https://github.com/mchenetz/VM-Workload-Migration
@@ -101,4 +121,4 @@ entries:
     urls:
     - https://mchenetz.github.io/VM-Workload-Migration/vm-migration-estimator-1.0.0.tgz
     version: 1.0.0
-generated: "2026-04-03T13:50:38.611613516Z"
+generated: "2026-04-03T14:16:40.669002986Z"
