@@ -1,6 +1,6 @@
 # VM Workload Migration Time Estimator
 
-A full-stack tool for estimating VM migration times when using **OpenShift Migration Toolkit for Virtualization (MTV/Forklift)** to migrate workloads from VMware vSphere. Compares three transfer methods side-by-side and recommends the optimal approach based on your infrastructure.
+A full-stack tool for estimating VM migration times when using **OpenShift Migration Toolkit for Virtualization (MTV/Forklift)** to migrate workloads from VMware vSphere. Compares two transfer methods side-by-side and recommends the optimal approach based on your infrastructure.
 
 ## Transfer Methods
 
@@ -26,16 +26,6 @@ time = total_disk_size / array_speed + (vm_count * 2s metadata)
 ```
 
 Requires VAAI-capable datastores (typically VMFS-backed).
-
-### FlashArray Volume Copy
-Pure Storage FlashArray volume-level clone using array-native snapshots. Creates near-instantaneous copies regardless of data size by leveraging copy-on-write metadata operations rather than moving actual data blocks.
-
-**Formula:**
-```
-time = 1s snapshot + (vm_count * 0.5s promotion)
-```
-
-Requires source VMs on FlashArray-backed datastores and Pure CSI driver on the target OpenShift cluster.
 
 ## Features
 
