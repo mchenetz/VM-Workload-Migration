@@ -156,8 +156,7 @@ Deploy to any Kubernetes cluster or OpenShift with Helm 3.
 
 ```bash
 helm install vm-migration \
-  oci://ghcr.io/mchenetz/charts/vm-migration-estimator \
-  --version 1.0.0
+  oci://ghcr.io/mchenetz/charts/vm-migration-estimator 
 ```
 
 ### Install from Helm Repository
