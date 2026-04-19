@@ -21,6 +21,11 @@ const ExportPage = lazy(() =>
 const SchedulePage = lazy(() =>
   import('./components/schedule/SchedulePage').then((m) => ({ default: m.SchedulePage }))
 );
+const MigrationStatusPage = lazy(() =>
+  import('./components/migrations/MigrationStatusPage').then((m) => ({
+    default: m.MigrationStatusPage,
+  }))
+);
 
 export function App() {
   usePlatformStatus();
@@ -34,6 +39,7 @@ export function App() {
           <Route path="/config" element={<ConfigPage />} />
           <Route path="/export" element={<ExportPage />} />
           <Route path="/schedule" element={<SchedulePage />} />
+          <Route path="/migrations" element={<MigrationStatusPage />} />
         </Routes>
       </Suspense>
     </BrowserRouter>
